@@ -1,0 +1,103 @@
+---
+# GoReleaser configuration for terraform-provider-garage.
+#
+# Distributes the provider binary to the Terraform / OpenTofu Registries per
+# https://developer.hashicorp.com/terraform/registry/providers/publishing.
+#
+# Key registry conventions baked in below:
+#   - Binary name must be `{ProjectName}_v{Version}` (with leading v).
+#   - Archives must be zip.
+#   - SHA256SUMS file and terraform-registry-manifest.json must be GPG-signed
+#     and attached to the GitHub release.
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: terraform-provider-garage
+    main: ./cmd/terraform-provider-garage
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
+    env:
+      # Registry distributes a single static binary per OS/arch; HCP Terraform
+      # users cannot install shared libraries.
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - '386'
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: windows
+        goarch: arm
+
+archives:
+  - formats:
+      - zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+
+checksum:
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+  github:
+    owner: donaldgifford
+    name: terraform-provider-garage
+  draft: false
+  prerelease: auto
+  mode: prepend
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: "^feat:"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^fix:"
+      order: 1
+    - title: Others
+      order: 999
+
+snapshot:
+  version_template: "{{ .Tag }}-dev"
