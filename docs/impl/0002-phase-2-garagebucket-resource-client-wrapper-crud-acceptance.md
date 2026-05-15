@@ -209,8 +209,8 @@ runtime errors).
 
 #### Tasks
 
-- [ ] Create `internal/resources/bucket/` package
-- [ ] Write `resource.go`:
+- [x] Create `internal/resources/bucket/` package
+- [x] Write `resource.go`:
   - `type Resource struct { client *client.Client }` with `New()` ctor
   - `Metadata()` sets `req.ProviderTypeName + "_bucket"`
   - `Configure()` asserts `*client.Client` from `req.ProviderData`
@@ -218,25 +218,30 @@ runtime errors).
     managed (`global_aliases`, `max_size`, `max_objects`, `force_destroy`),
     computed (`id`, `created`, `bytes`, `objects`,
     `unfinished_multipart_uploads`)
-- [ ] Write `model.go`:
+  - Lifecycle methods (Create/Read/Update/Delete) stubbed to emit
+    "not yet implemented" diagnostics — Phases 4-6 replace them
+- [x] Write `model.go`:
   - `Model` struct mirroring schema (see DESIGN-0002 §Data Model)
-  - Helpers: `modelToQuotas(Model) *openapi.ApiBucketQuotas`,
-    `applyBucketInfoToModel(*openapi.GetBucketInfoResponse, *Model)`
-- [ ] Apply `UseStateForUnknown` plan modifier on the `id` attribute
-      (suppresses "(known after apply)" once the bucket has been created)
-- [ ] Unit test schema marshaling round-trip (Model ↔ openapi types) in
-      `model_test.go`
-- [ ] Run `just lint` / `just test` — verify all green
-- [ ] Commit as `feat: scaffold garage_bucket resource package (IMPL-0002 Phase 3)`
+  - Helpers: `modelToQuotas(*Model) *openapi.ApiBucketQuotas`,
+    `applyBucketInfoToModel(*openapi.GetBucketInfoResponse, *Model) diag.Diagnostics`
+- [x] Apply `UseStateForUnknown` plan modifier on the `id` attribute
+      (suppresses "(known after apply)" once the bucket has been created);
+      also applied on `global_aliases` for the same reason post-create
+- [x] Unit test schema marshaling round-trip (Model ↔ openapi types) in
+      `model_test.go` — covers all three quota states, empty-alias set,
+      and the literal-zero-vs-null distinction
+- [x] Run `just lint` / `just test` — verify all green (0 lint issues;
+      all bucket-package tests pass)
+- [x] Commit as `feat: scaffold garage_bucket resource package (IMPL-0002 Phase 3)`
 
 #### Success Criteria
 
-- `internal/resources/bucket/` package compiles
+- `internal/resources/bucket/` package compiles ✓
 - Schema attribute set matches DESIGN-0002 exactly; MarkdownDescription
-  strings are present and proofread for typos
-- Model ↔ openapi conversion helpers unit-tested
-- Resource is **not** yet registered in `provider.Resources()` — confirmed
-  by `grep` showing the slot still returns nil
+  strings are present and proofread for typos ✓
+- Model ↔ openapi conversion helpers unit-tested ✓
+- Resource is **not** yet registered in `provider.Resources()` —
+  confirmed: `Resources()` still returns nil ✓
 
 ---
 
