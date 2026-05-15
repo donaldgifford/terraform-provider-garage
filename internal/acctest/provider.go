@@ -6,6 +6,7 @@ package acctest
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -27,12 +28,16 @@ var TestAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 	"garage": providerserver.NewProtocol6WithError(provider.New("acctest")()),
 }
 
-// PreCheck verifies the test environment is usable. The only requirement
-// today is a reachable Docker daemon; `t.Skip`s with a clear message when
-// the developer doesn't have one running so `just testacc` is still
-// runnable on machines without Docker (the tests skip rather than fail).
+// PreCheck verifies the test environment is usable. Skips when TF_ACC is
+// unset (matches terraform-plugin-testing's own gate, but applied before
+// the expensive container start so `just test` doesn't churn Docker on
+// acceptance tests that will be skipped anyway) and when Docker is
+// unreachable.
 func PreCheck(t *testing.T) {
 	t.Helper()
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("acctest: TF_ACC not set, skipping acceptance test")
+	}
 	if _, err := testcontainers.NewDockerClientWithOpts(context.Background()); err != nil {
 		t.Skipf("acctest: Docker not available, skipping (%v)", err)
 	}

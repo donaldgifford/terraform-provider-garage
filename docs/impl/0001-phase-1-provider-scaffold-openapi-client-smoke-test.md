@@ -464,24 +464,19 @@ job (already wired) becomes meaningful here.
 
 #### Tasks
 
-- [ ] Rewrite `examples/provider/provider.tf` to the `tfplugindocs` convention:
-      a single minimal `provider "garage" {}` block, **no `terraform`
-      required_providers block** (`tfplugindocs` synthesizes that section),
-      **no `variable` declarations**. Match the HashiCorp scaffolding
-      template style. Token attribute omitted; a comment notes that
-      `GARAGE_TOKEN` is the recommended supply mechanism. Pure literal
-      values only — examples render as static HCL in docs and don't need to
-      be runnable
-- [ ] Write `examples/data-sources/garage_cluster_info/data-source.tf` —
-      minimal example block (just `data "garage_cluster_info" "this" {}` plus
-      a single `output` showing how to consume one attribute)
-- [ ] Run `just generate`
-- [ ] Verify `docs/index.md` reflects the actual provider config schema
-- [ ] Verify `docs/data-sources/garage_cluster_info.md` is generated and
-      readable
-- [ ] Confirm the CI `generate` job passes (no uncommitted drift)
-- [ ] Spot-check the schema attribute descriptions for typos / clarity
-- [ ] Commit generated docs
+- [x] Rewrite `examples/provider/provider.tf` to the `tfplugindocs` convention:
+      single minimal `provider "garage" {}` block, no `terraform`
+      required_providers section, no `variable` declarations, token attr
+      omitted with a comment pointing at `GARAGE_TOKEN`
+- [x] Write `examples/data-sources/garage_cluster_info/data-source.tf` —
+      `data "garage_cluster_info" "this" {}` plus an `output` showing
+      `layout_version` consumption
+- [x] Run `just generate`
+- [x] Verify `docs/index.md` reflects the actual provider config schema
+- [x] Verify `docs/data-sources/cluster_info.md` is generated and readable
+- [x] Idempotent run confirmed locally (second `just generate` → zero diff)
+- [x] Spot-check the schema attribute descriptions for typos / clarity
+- [x] Commit generated docs
 
 #### Success Criteria
 
