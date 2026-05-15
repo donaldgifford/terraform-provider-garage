@@ -358,28 +358,33 @@ from this point forward.
 
 #### Tasks
 
-- [ ] Create `internal/acctest/` package
-- [ ] Write `fixture.go`:
+- [x] Create `internal/acctest/` package
+- [x] Write `fixture.go`:
   - `type Garage struct { container testcontainers.Container; Endpoint string; AdminToken string }`
-  - `func Start(t *testing.T) *Garage` — starts `dxflrs/garage:v<pinned>`
-        with `--single-node --default-bucket`
+  - `func Start(t *testing.T) *Garage` — starts `dxflrs/garage:v2.3.0`
+        with `server --single-node --default-bucket`
   - Environment: `GARAGE_DEFAULT_ACCESS_KEY`, `GARAGE_DEFAULT_SECRET_KEY`,
-        `GARAGE_DEFAULT_BUCKET` (randomized)
+        `GARAGE_DEFAULT_BUCKET` (randomized per-fixture)
   - Resolve container endpoint via `testcontainers.MappedPort`
   - Admin token: pass `GARAGE_ADMIN_TOKEN=<randomized>` via container env.
-        Verify Garage v2.3.0 respects it on startup; if not supported, fall
-        back to parsing the container's startup logs for the admin-token line
+        Verified working: `garage --help` shows `[env: GARAGE_ADMIN_TOKEN=]`
+        on the `--admin-token` flag — no log-parsing fallback needed
+  - Inject a minimal `/etc/garage.toml` via `testcontainers.ContainerFile`
+        (Garage image is `FROM scratch`, no shell, so bind-mounting is
+        impractical; templated config with a randomized `rpc_secret` is
+        cleanest). Wait for readiness via `wait.ForHTTP("/v2/GetClusterStatus")`
+        with the bearer header set
   - **Per-test lifecycle**: every Test* function calls `acctest.Start(t)` and
         gets its own container. Cold-start cost is ~2-5s; accepted in
         exchange for full state isolation. No `TestMain`
   - `t.Cleanup()` for container termination
-- [ ] Write `provider.go`:
+- [x] Write `provider.go`:
   - `var TestAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){...}`
-  - `func PreCheck(t *testing.T)` — Docker availability check; `t.Skip` if
-        unavailable
+  - `func PreCheck(t *testing.T)` — Docker availability check via
+        `testcontainers.NewDockerClientWithOpts`; `t.Skip` if unavailable
   - `func TestAccProviderConfig(g *Garage) string` — helper to render a
         `provider "garage" {}` block pointing at the fixture endpoint
-- [ ] Verify the fixture builds (`just build` covers all packages)
+- [x] Verify the fixture builds (`just build` covers all packages)
 
 #### Success Criteria
 
