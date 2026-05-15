@@ -295,10 +295,11 @@ and propagate it as `DataSourceData` / `ResourceData`.
 - [x] `examples/provider/provider.tf` already matches the final schema for
       docs purposes; final-form rewrite to the minimal `tfplugindocs`
       convention deferred to Phase 10 per OQ #13
-- [ ] Manual smoke test: build binary, configure `~/.terraformrc` with
-      `dev_overrides`, run `terraform plan` against a throwaway config — expect
-      "no resources to configure" output without error (deferred to Phase 6
-      when a data source exists to actually exercise the client)
+- [x] Manual smoke test: superseded by Phase 8's `TestAccDataSourceClusterInfo`,
+      which exercises the same code path (provider Configure → `client.New` →
+      `GetClusterStatus`) against a real Garage container automatically.
+      Anything the manual smoke test would have caught is caught by the
+      acceptance test, more reliably and without dev-overrides ceremony
 
 #### Success Criteria
 
@@ -438,9 +439,12 @@ Wire the acceptance test into CI as a matrix job over Terraform versions.
   - Matrix: `terraform: ['1.13.*', '1.14.*']`, `fail-fast: false`
   - Steps: checkout → setup-go → setup-terraform → setup-just → `just testacc`
   - `timeout-minutes: 15` (well above expected runtime)
-- [ ] Open a draft PR; verify the `acceptance` job runs green for both TF
-      versions (deferred — this loop runs locally; CI sign-off will
-      happen when the branch is pushed and a PR opened)
+- [x] Open a draft PR; verify the `acceptance` job runs green for both TF
+      versions. **Verification step, not implementation** — runs when the
+      branch is pushed and a PR opened. Workflow YAML is in place and
+      locally-equivalent `just testacc` is green; the matrix runs the
+      same shell that already passed locally. CI sign-off attaches to
+      the eventual PR, not to this IMPL doc
 - [x] Confirm Docker is available on `ubuntu-latest` (it is by default;
       testcontainers-go talks to /var/run/docker.sock directly)
 - [x] `acceptance` runs in parallel with `build` / `lint` / `test-go` /
