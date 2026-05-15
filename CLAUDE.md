@@ -34,24 +34,25 @@ Once provider code exists (Phase 1+), single-test run: `go test -v -run TestAccG
 Per RFC-0001 §Design/Architecture, the target layout is:
 
 ```
-cmd/terraform-provider-garage/main.go     # providerserver.Serve entry point (currently a stub)
+cmd/terraform-provider-garage/main.go     # providerserver.Serve entry point
 internal/
   client/
     openapi/        # vendored garage-admin-v2.json
     generated.go    # oapi-codegen output (regenerated via go generate)
     client.go       # thin wrapper: typed errors, retries
   provider/
-    provider.go     # GarageProvider — registers Resources() + DataSources() only
-    config.go       # provider-level config schema (endpoint, token)
+    provider.go     # GarageProvider — Phase 2 stub, schema/Configure fill in Phase 5
   resources/{bucket,key,bucket_key,bucket_alias}/
-  datasources/{bucket,key,cluster_info}/
+  datasources/cluster_info/  # garage_cluster_info — Phase 6
 tools/              # separate go.mod for tfplugindocs (build-only dep)
 examples/           # consumed by tfplugindocs to render docs/
 ```
 
-**None of `internal/` exists yet** — Phase 1 work is initializing `go.mod`, scaffolding `cmd/terraform-provider-garage/main.go`, generating the client via `oapi-codegen`, and adding a `garage_cluster_info` smoke-test data source. The directory tree is the *target*, not the current state.
+**Current state (Phase 2 complete):** `go.mod` initialized, `cmd/terraform-provider-garage/main.go` wired to `providerserver.Serve` (with `-debug` flag), `internal/provider/provider.go` carries the `GarageProvider` skeleton — schema empty, `Configure` no-op, no resources or data sources registered yet. Phase 3 (OpenAPI spec + codegen) is next.
 
-The provider will register only resources and data sources — RFC-0001 deliberately excludes functions, actions, and ephemeral resources from v0.1 (unlike the HashiCorp scaffolding template, which exercises all five primitive categories).
+The provider registers only resources and data sources — RFC-0001 deliberately excludes functions, actions, and ephemeral resources from v0.1 (unlike the HashiCorp scaffolding template, which exercises all five primitive categories).
+
+The registry address declared in `main.go` is `registry.terraform.io/donaldgifford/garage`. When publishing, this must match the registry owner; treat it as a single point of edit when forking.
 
 ### Docs generation
 

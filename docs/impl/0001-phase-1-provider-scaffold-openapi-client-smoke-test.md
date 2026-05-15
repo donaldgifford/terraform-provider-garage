@@ -140,24 +140,24 @@ Intentionally minimal — just enough scaffolding that `just build` and
 
 #### Tasks
 
-- [ ] `go mod init github.com/donaldgifford/terraform-provider-garage`
-- [ ] `go get` the Phase 1 direct deps:
+- [x] `go mod init github.com/donaldgifford/terraform-provider-garage`
+- [x] `go get` the Phase 1 direct deps:
   - `github.com/hashicorp/terraform-plugin-framework`
   - `github.com/hashicorp/terraform-plugin-framework-validators` (used in Phase 5)
   - `github.com/hashicorp/terraform-plugin-go`
   - `github.com/hashicorp/terraform-plugin-log`
   - `github.com/hashicorp/terraform-plugin-testing`
-- [ ] Write `cmd/terraform-provider-garage/main.go` — `providerserver.Serve`
+- [x] Write `cmd/terraform-provider-garage/main.go` — `providerserver.Serve`
       with `-debug` flag wired
-- [ ] Write `internal/provider/provider.go` with `GarageProvider` skeleton
+- [x] Write `internal/provider/provider.go` with `GarageProvider` skeleton
   - `Metadata()` sets `resp.TypeName = "garage"`
   - `Schema()` with empty attribute map (filled in Phase 5)
   - `Configure()` is a no-op (filled in Phase 5)
   - `Resources()` and `DataSources()` return empty slices
-- [ ] `go mod tidy`
-- [ ] Verify `just build` succeeds (binary at `build/bin/terraform-provider-garage`)
-- [ ] Verify `just lint` succeeds (no `depguard` violations)
-- [ ] Verify `just test` succeeds (no tests yet, but `go test ./...` exits 0)
+- [x] `go mod tidy`
+- [x] Verify `just build` succeeds (binary at `build/bin/terraform-provider-garage`)
+- [x] Verify `just lint` succeeds (no `depguard` violations)
+- [x] Verify `just test` succeeds (no tests yet, but `go test ./...` exits 0)
 
 #### Success Criteria
 
