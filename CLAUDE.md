@@ -34,24 +34,26 @@ Once provider code exists (Phase 1+), single-test run: `go test -v -run TestAccG
 Per RFC-0001 §Design/Architecture, the target layout is:
 
 ```
-cmd/terraform-provider-garage/main.go     # providerserver.Serve entry point (currently a stub)
+main.go             # providerserver.Serve entry point at repo root
+                    # (HashiCorp convention; tfplugindocs requires main at provider-dir root)
 internal/
   client/
-    openapi/        # vendored garage-admin-v2.json
-    generated.go    # oapi-codegen output (regenerated via go generate)
+    openapi/        # vendored garage-admin-v2.json + downgrade-shim output
+    generated.go    # oapi-codegen output (regenerated via just generate)
     client.go       # thin wrapper: typed errors, retries
   provider/
-    provider.go     # GarageProvider — registers Resources() + DataSources() only
-    config.go       # provider-level config schema (endpoint, token)
+    provider.go     # GarageProvider — Phase 2 stub, schema/Configure fill in Phase 5
   resources/{bucket,key,bucket_key,bucket_alias}/
-  datasources/{bucket,key,cluster_info}/
-tools/              # separate go.mod for tfplugindocs (build-only dep)
+  datasources/cluster_info/  # garage_cluster_info — Phase 6
+tools/              # separate go.mod for tfplugindocs + oapi-codegen + spec-downgrade
 examples/           # consumed by tfplugindocs to render docs/
 ```
 
-**None of `internal/` exists yet** — Phase 1 work is initializing `go.mod`, scaffolding `cmd/terraform-provider-garage/main.go`, generating the client via `oapi-codegen`, and adding a `garage_cluster_info` smoke-test data source. The directory tree is the *target*, not the current state.
+**Current state (Phase 3 complete):** `main.go` at repo root wired to `providerserver.Serve` (with `-debug` flag). `internal/provider/provider.go` carries the `GarageProvider` skeleton — schema empty, `Configure` no-op, no resources or data sources registered yet (filled by Phases 5/6). `internal/client/openapi/generated.go` is the `oapi-codegen` output of the Garage admin v2 OpenAPI spec, generated via `just generate`. The upstream spec is OpenAPI 3.1.0; `tools/cmd/spec-downgrade/` rewrites it to 3.0.3-compatible JSON because `kin-openapi` (oapi-codegen's parser) is 3.0-only. Both `garage-admin-v2.json` (raw) and `garage-admin-v2.openapi30.json` (downgraded) are committed.
 
-The provider will register only resources and data sources — RFC-0001 deliberately excludes functions, actions, and ephemeral resources from v0.1 (unlike the HashiCorp scaffolding template, which exercises all five primitive categories).
+The provider registers only resources and data sources — RFC-0001 deliberately excludes functions, actions, and ephemeral resources from v0.1 (unlike the HashiCorp scaffolding template, which exercises all five primitive categories).
+
+The registry address declared in `main.go` is `registry.terraform.io/donaldgifford/garage`. When publishing, this must match the registry owner; treat it as a single point of edit when forking.
 
 ### Docs generation
 
@@ -65,7 +67,22 @@ GoReleaser (`.goreleaser.yml`) builds the registry-shaped artifact set: multi-OS
 
 `GPG_FINGERPRINT` + `GPG_PRIVATE_KEY` repo secrets must be set before the first release — see ADR-0004 (deferred).
 
+## Licensing and file headers
+
+**License: MPL-2.0** per [ADR-0007](docs/adr/0007-provider-license-mpl-20-over-apache-20.md) — matches OpenTofu, pre-BSL Terraform, and the broader provider ecosystem.
+
+Every Go source file (including build-only files under `tools/`) carries this two-line header:
+
+```go
+// Copyright (c) 2026 Donald Gifford
+// SPDX-License-Identifier: MPL-2.0
+```
+
+- Copyright year is fixed at the year of original authorship (2026); authorship attribution lives in git history, not the header.
+- The `LICENSE` file at the repo root holds the full MPL-2.0 text. Non-Go files (Markdown, YAML, JSON, HCL) do not carry inline SPDX headers; the repo-level `LICENSE` applies project-wide.
+- Files derived from MPL-2.0 third-party sources (e.g. HashiCorp scaffolding) retain their upstream copyright header alongside ours.
+- The vendored `internal/client/openapi/garage-admin-v2.json` is unmodified from Garage HQ's published version; `oapi-codegen`-generated Go code (`generated.go`) carries our standard MPL-2.0 header — interface specs are not copyrightable software, so AGPL terms on the upstream Garage source don't propagate to generated client code.
+
 ## Open template carryovers worth knowing
 
 - `.forge-lock.yaml` was deleted, so `forge sync` will no longer overwrite files here. Re-adding it ties the repo back to the `go-ext` blueprint.
-- Forge's `LICENSE`/copyright story is **Apache-2.0**, but RFC `docs/repo-init.md` §6 argues for **MPL-2.0** (matches OpenTofu, pre-BSL Terraform, the broader provider ecosystem). License hasn't been chosen yet — confirm with the user before adding copyright headers.
