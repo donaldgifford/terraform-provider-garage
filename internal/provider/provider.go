@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/donaldgifford/terraform-provider-garage/internal/client"
+	"github.com/donaldgifford/terraform-provider-garage/internal/datasources/clusterinfo"
 )
 
 // Environment variables consulted as fallback when the corresponding
@@ -170,9 +171,10 @@ func (*GarageProvider) Resources(_ context.Context) []func() resource.Resource {
 }
 
 // DataSources returns the data-source constructors the provider exposes.
-// Phase 6 of IMPL-0001 adds garage_cluster_info.
 func (*GarageProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		clusterinfo.New,
+	}
 }
 
 // resolve returns the attribute value if set, otherwise the named
