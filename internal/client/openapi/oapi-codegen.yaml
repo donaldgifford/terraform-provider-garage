@@ -1,0 +1,17 @@
+# oapi-codegen configuration for the Garage admin v2 client.
+#
+# Drives `go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen`
+# via the //go:generate directive in doc.go. Output is committed; CI's
+# generate-drift check covers manual edits and forgotten regenerations.
+package: openapi
+output: generated.go
+# Avoid name collisions between the model schemas (e.g.
+# ApplyClusterLayoutResponse from `components.schemas`) and the
+# client's HTTP-response wrapper types (which oapi-codegen also names
+# `<OperationID>Response` by default). Suffix the latter.
+output-options:
+  response-type-suffix: HTTPResponse
+generate:
+  models: true
+  client: true
+  embedded-spec: false

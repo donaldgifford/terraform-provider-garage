@@ -3,13 +3,14 @@
 
 //go:build generate
 
-// Package tools pins build-only dependencies (tfplugindocs) as indirect
-// imports so `go mod tidy` keeps them in tools/go.mod without leaking them
-// into the main provider module.
+// Package tools pins build-only dependencies (tfplugindocs, oapi-codegen)
+// as indirect imports so `go mod tidy` keeps them in tools/go.mod without
+// leaking them into the main provider module's dependency graph.
 package tools
 
 import (
 	_ "github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs"
+	_ "github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen"
 )
 
 // Format Terraform code in examples/ so tfplugindocs renders cleanly.

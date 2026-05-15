@@ -23,17 +23,24 @@ _default:
 [group('build')]
 build:
     @mkdir -p {{bin_dir}}
-    go build -ldflags "-X main.version={{version}} -X main.commit={{commit}}" -o {{bin_dir}}/{{project_name}} ./cmd/{{project_name}}
+    go build -ldflags "-X main.version={{version}} -X main.commit={{commit}}" -o {{bin_dir}}/{{project_name}} .
     @echo "✓ Provider binary built"
 
 # go install for use with ~/.terraformrc dev_overrides
 [group('build')]
 install:
-    go install -v ./cmd/{{project_name}}
+    go install -v .
 
-# Regenerate docs/ via tfplugindocs (from tools/)
+# Regenerate OpenAPI client (internal/client/openapi/generated.go) and
+# Terraform provider docs (docs/{resources,data-sources}/...). Runs the
+# client codegen first so docs regeneration always sees a buildable tree.
 [group('build')]
 generate:
+    @echo "→ Downgrading OpenAPI 3.1.0 spec to 3.0.3 form"
+    cd tools && go run ./cmd/spec-downgrade -in ../internal/client/openapi/garage-admin-v2.json -out ../internal/client/openapi/garage-admin-v2.openapi30.json
+    @echo "→ Generating Garage admin client"
+    go generate ./internal/client/openapi/...
+    @echo "→ Regenerating provider docs via tfplugindocs"
     cd tools && go generate ./...
 
 # Remove build artifacts

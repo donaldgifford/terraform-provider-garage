@@ -146,11 +146,18 @@ when the spec is regenerated.
   occasionally surprising (e.g. union types in OpenAPI 3.1 become
   awkward Go interfaces). The wrapper insulates downstream code from
   this.
-- **OpenAPI 3.1.0 support in `oapi-codegen` v2 is newer than its 3.0
-  support.** The Garage spec uses 3.1.0; the first task of IMPL-0001
-  Phase 3 verifies generation works cleanly. If it doesn't, the
-  fallback is either a 3.0-downgrade shim or evaluating an alternative
-  generator — both add cost.
+- **OpenAPI 3.1.0 support in `oapi-codegen` v2 is missing in practice.**
+  The Garage spec uses 3.1.0. IMPL-0001 Phase 3 verified that
+  `oapi-codegen` v2.7.0 (and its underlying `kin-openapi` parser)
+  rejects three 3.1.0-only constructs the Garage spec uses: type unions
+  `"type": ["X", "null"]`, the nullable-ref idiom
+  `oneOf: [{type: "null"}, X]`, and tuple validation
+  (`prefixItems` + `items: false`). Resolution: a downgrade-shim Go
+  program at `tools/cmd/spec-downgrade/` rewrites the spec into a
+  3.0.3-compatible JSON form as the first step of `just generate`.
+  Both the raw and downgraded specs are committed so reviewers see the
+  upstream diff and the downgrade effect side-by-side. Revisit if
+  `oapi-codegen` ships first-class 3.1.0 support upstream.
 - **Two `go.mod` modules to manage.** The provider's main module and the
   `tools/` build-only module both need updating when bumping
   `oapi-codegen` major versions. Documented in `tools/tools.go`.

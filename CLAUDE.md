@@ -34,21 +34,22 @@ Once provider code exists (Phase 1+), single-test run: `go test -v -run TestAccG
 Per RFC-0001 §Design/Architecture, the target layout is:
 
 ```
-cmd/terraform-provider-garage/main.go     # providerserver.Serve entry point
+main.go             # providerserver.Serve entry point at repo root
+                    # (HashiCorp convention; tfplugindocs requires main at provider-dir root)
 internal/
   client/
-    openapi/        # vendored garage-admin-v2.json
-    generated.go    # oapi-codegen output (regenerated via go generate)
+    openapi/        # vendored garage-admin-v2.json + downgrade-shim output
+    generated.go    # oapi-codegen output (regenerated via just generate)
     client.go       # thin wrapper: typed errors, retries
   provider/
     provider.go     # GarageProvider — Phase 2 stub, schema/Configure fill in Phase 5
   resources/{bucket,key,bucket_key,bucket_alias}/
   datasources/cluster_info/  # garage_cluster_info — Phase 6
-tools/              # separate go.mod for tfplugindocs (build-only dep)
+tools/              # separate go.mod for tfplugindocs + oapi-codegen + spec-downgrade
 examples/           # consumed by tfplugindocs to render docs/
 ```
 
-**Current state (Phase 2 complete):** `go.mod` initialized, `cmd/terraform-provider-garage/main.go` wired to `providerserver.Serve` (with `-debug` flag), `internal/provider/provider.go` carries the `GarageProvider` skeleton — schema empty, `Configure` no-op, no resources or data sources registered yet. Phase 3 (OpenAPI spec + codegen) is next.
+**Current state (Phase 3 complete):** `main.go` at repo root wired to `providerserver.Serve` (with `-debug` flag). `internal/provider/provider.go` carries the `GarageProvider` skeleton — schema empty, `Configure` no-op, no resources or data sources registered yet (filled by Phases 5/6). `internal/client/openapi/generated.go` is the `oapi-codegen` output of the Garage admin v2 OpenAPI spec, generated via `just generate`. The upstream spec is OpenAPI 3.1.0; `tools/cmd/spec-downgrade/` rewrites it to 3.0.3-compatible JSON because `kin-openapi` (oapi-codegen's parser) is 3.0-only. Both `garage-admin-v2.json` (raw) and `garage-admin-v2.openapi30.json` (downgraded) are committed.
 
 The provider registers only resources and data sources — RFC-0001 deliberately excludes functions, actions, and ephemeral resources from v0.1 (unlike the HashiCorp scaffolding template, which exercises all five primitive categories).
 

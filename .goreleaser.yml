@@ -18,7 +18,7 @@ before:
 
 builds:
   - id: terraform-provider-garage
-    main: ./cmd/terraform-provider-garage
+    main: .
     binary: '{{ .ProjectName }}_v{{ .Version }}'
     env:
       # Registry distributes a single static binary per OS/arch; HCP Terraform
