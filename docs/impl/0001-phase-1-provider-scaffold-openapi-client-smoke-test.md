@@ -433,16 +433,20 @@ Wire the acceptance test into CI as a matrix job over Terraform versions.
 
 #### Tasks
 
-- [ ] Add `acceptance` job to `.github/workflows/ci.yml`:
+- [x] Add `acceptance` job to `.github/workflows/ci.yml`:
   - `runs-on: ubuntu-latest`
-  - Matrix: `terraform: ['1.13.*', '1.14.*']`
+  - Matrix: `terraform: ['1.13.*', '1.14.*']`, `fail-fast: false`
   - Steps: checkout → setup-go → setup-terraform → setup-just → `just testacc`
   - `timeout-minutes: 15` (well above expected runtime)
 - [ ] Open a draft PR; verify the `acceptance` job runs green for both TF
-      versions
-- [ ] Confirm Docker is available on `ubuntu-latest` (it is by default)
-- [ ] Decide whether `acceptance` is `needs:` of any earlier job, or runs in
-      parallel with `build` / `lint` / `test-go`
+      versions (deferred — this loop runs locally; CI sign-off will
+      happen when the branch is pushed and a PR opened)
+- [x] Confirm Docker is available on `ubuntu-latest` (it is by default;
+      testcontainers-go talks to /var/run/docker.sock directly)
+- [x] `acceptance` runs in parallel with `build` / `lint` / `test-go` /
+      `generate`. No `needs:` dependency — they're independent gates.
+      If acceptance starts flaking it can be moved to `needs: [lint, build]`
+      to short-circuit on cheap failures, but baseline is parallel
 
 #### Success Criteria
 

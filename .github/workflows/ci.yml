@@ -134,3 +134,31 @@ jobs:
             echo "Unexpected difference after 'just generate'. Run it locally and commit."
             exit 1
           }
+
+  acceptance:
+    name: Acceptance (Terraform ${{ matrix.terraform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform: ["1.13.*", "1.14.*"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          terraform_wrapper: false
+
+      - uses: extractions/setup-just@v3
+
+      # ubuntu-latest runners ship with Docker pre-installed; no setup-docker
+      # action needed. testcontainers-go talks to /var/run/docker.sock.
+      - name: Run acceptance tests
+        run: just testacc
