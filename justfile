@@ -78,7 +78,7 @@ test-report:
 # Run acceptance tests against real Garage (TF_ACC=1, 120m timeout)
 [group('test')]
 testacc:
-    TF_ACC=1 go test -v -cover -timeout 120m ./internal/provider/
+    TF_ACC=1 go test -v -cover -timeout 120m ./internal/...
 
 # ─── Lint & format ─────────────────────────────────────────────────
 

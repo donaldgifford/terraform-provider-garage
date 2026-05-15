@@ -402,20 +402,22 @@ Phase 1 acceptance gate.
 
 #### Tasks
 
-- [ ] Write `internal/datasources/cluster_info/data_source_test.go`:
+- [x] Write `internal/datasources/clusterinfo/data_source_test.go`:
   - `TestAccDataSourceClusterInfo` function
-  - `PreCheck: func() { acctest.PreCheck(t) }`
+  - `acctest.PreCheck(t)` at the top (skip when Docker unavailable)
+  - `acctest.Start(t)` to get the fixture
   - `ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories`
   - One test step:
     - Config: `acctest.TestAccProviderConfig(g)` + `data "garage_cluster_info" "this" {}`
-    - State check: `garage_version` is non-empty
-    - State check: `nodes` list has length ≥ 1
-- [ ] Call `t.Parallel()` inside `TestAccDataSourceClusterInfo` — establishes
-      the parallelism pattern for Phase 2+ acceptance tests. With one test
-      in Phase 1, this is functionally a no-op; serves to surface
-      port/memory issues early if they exist
-- [ ] Run `just testacc` locally — verify pass
-- [ ] Verify the test runs in under 30s (cold container start + read)
+    - State checks: `nodes.#` = 1 (single-node fixture);
+      `nodes.0.garage_version` set; `nodes.0.is_up` = true;
+      `layout_version` set; `id` set
+- [x] Call `t.Parallel()` inside `TestAccDataSourceClusterInfo` — establishes
+      the parallelism pattern for Phase 2+ acceptance tests
+- [x] Run `just testacc` locally — verifies pass against a real
+      `dxflrs/garage:v2.3.0` container
+- [x] Verify the test runs in under 30s — measured ~11s end-to-end
+      (cold container start + Terraform run)
 
 #### Success Criteria
 

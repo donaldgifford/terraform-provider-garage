@@ -94,7 +94,9 @@ func Start(t *testing.T) *Garage {
 	req := testcontainers.ContainerRequest{
 		Image:        garageImage,
 		ExposedPorts: []string{adminPort},
-		Cmd:          []string{"server", "--single-node", "--default-bucket"},
+		// The image has no ENTRYPOINT; its default Cmd is ["/garage", "server"].
+		// Replacing Cmd entirely means we have to repeat the binary path.
+		Cmd: []string{"/garage", "server", "--single-node", "--default-bucket"},
 		Env: map[string]string{
 			"GARAGE_ADMIN_TOKEN":        adminToken,
 			"GARAGE_DEFAULT_ACCESS_KEY": accessKey,
