@@ -33,4 +33,5 @@ docz create impl "Your Implementation Title"
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | IMPL-0001 | Phase 1: provider scaffold, OpenAPI client, smoke test | Draft | 2026-05-15 | Donald Gifford | [0001-phase-1-provider-scaffold-openapi-client-smoke-test.md](0001-phase-1-provider-scaffold-openapi-client-smoke-test.md) |
+| IMPL-0002 | Phase 2 garage_bucket resource: client wrapper, CRUD, acceptance suite | Draft | 2026-05-15 | Donald Gifford | [0002-phase-2-garagebucket-resource-client-wrapper-crud-acceptance.md](0002-phase-2-garagebucket-resource-client-wrapper-crud-acceptance.md) |
 <!-- END DOCZ AUTO-GENERATED -->
