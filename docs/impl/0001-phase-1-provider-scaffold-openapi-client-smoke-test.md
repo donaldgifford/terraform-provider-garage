@@ -275,26 +275,30 @@ and propagate it as `DataSourceData` / `ResourceData`.
 
 #### Tasks
 
-- [ ] Define `GarageProviderModel` struct with `Endpoint` and `Token` fields
+- [x] Define `GarageProviderModel` struct with `Endpoint` and `Token` fields
       (both `types.String`)
-- [ ] Fill in `Schema()`:
+- [x] Fill in `Schema()`:
   - `endpoint` — Optional, MarkdownDescription mentions `GARAGE_ENDPOINT`
         fallback
   - `token` — Optional, Sensitive, MarkdownDescription mentions `GARAGE_TOKEN`
         fallback
-- [ ] Add endpoint URL validator using `terraform-plugin-framework-validators`:
+- [x] Add endpoint URL validator using `terraform-plugin-framework-validators`:
       `stringvalidator.RegexMatches(regexp.MustCompile("^https?://"), "endpoint must be an http(s) URL")`
-- [ ] Implement `Configure()`:
+- [x] Implement `Configure()`:
   - Read plan model
+  - Diagnose Unknown-valued attributes early (improves error attribution)
   - Resolve attribute values with env-var fallback
         (`endpoint` → `GARAGE_ENDPOINT`, `token` → `GARAGE_TOKEN`)
   - If still unset for either, append diagnostic error
   - Construct `client.New(endpoint, token)`
   - Hand client to `resp.DataSourceData` and `resp.ResourceData`
-- [ ] Update `examples/provider/provider.tf` to match final schema (if needed)
+- [x] `examples/provider/provider.tf` already matches the final schema for
+      docs purposes; final-form rewrite to the minimal `tfplugindocs`
+      convention deferred to Phase 10 per OQ #13
 - [ ] Manual smoke test: build binary, configure `~/.terraformrc` with
       `dev_overrides`, run `terraform plan` against a throwaway config — expect
-      "no resources to configure" output without error
+      "no resources to configure" output without error (deferred to Phase 6
+      when a data source exists to actually exercise the client)
 
 #### Success Criteria
 
