@@ -156,40 +156,44 @@ code that consumes the answers. Findings get folded into IMPL-0002 §Decisions
 
 #### Tasks
 
-- [ ] **Verification A — Last-alias removal.** With a single-alias bucket,
-      issue `RemoveBucketAlias`. Does Garage:
-  (i) refuse (4xx),
-  (ii) succeed and leave a no-alias bucket reachable only by ID, or
-  (iii) succeed and delete the bucket entirely?
-      Document the result. Adjust Phase 5 alias-diff ordering if (i) turns
-      out not to apply
-- [ ] **Verification B — `AddBucketAlias` idempotency for same bucket.**
-      Add an alias, then add the same alias again to the same bucket.
-      Does Garage return 2xx (no-op idempotent) or 4xx? Document
-- [ ] **Verification C — `DeleteBucket` on non-empty bucket.** Spec text
-      already says it refuses ("A bucket cannot be deleted if it is not
-      empty"). Confirm and capture the exact error response shape so the
-      resource can emit a useful diagnostic. Confirm there is no force/
-      recursive flag we missed
-- [ ] **Verification D — `AddBucketAlias` of alias owned by another
-      bucket.** What HTTP status / error body does Garage return? Captured
-      for diagnostic clarity, not control flow
-- [ ] Capture verifications as scratch test functions inside
-      `internal/resources/bucket/livecheck_test.go` (build-tag
-      `garageprobe`, separate from the main acceptance suite — runnable on
-      demand via `go test -tags=garageprobe`). The tests document the
-      observed behavior in their assertions
-- [ ] Replace DESIGN-0002 §Decisions text on items 2-5 with the resolved
-      findings; commit doc + livecheck file together as
-      `chore: capture live-API findings for IMPL-0002 (Phase 2)`
+- [x] **Verification A — Last-alias removal.** Resolved: Garage refuses
+      with HTTP 400 `"Bucket X doesn't have other aliases, please delete
+      it instead of just unaliasing."`. Adds-before-removes ordering in
+      Phase 5 sidesteps the issue for renames; a pure-remove diff
+      surfaces Garage's message verbatim
+- [x] **Verification B — `AddBucketAlias` idempotency for same bucket.**
+      Resolved: 2xx no-op. Safe to re-issue on Create-rollback retries
+      without inspecting the response
+- [ ] **Verification C — `DeleteBucket` on non-empty bucket.** Deferred
+      to Phase 6 — needs an S3 PUT to make the bucket non-empty, which
+      depends on the `aws-sdk-go-v2` setup Phase 6 introduces. Spec text
+      already confirms refuse behavior; the remaining "capture error
+      shape" lands in Phase 6's
+      `TestAccGarageBucket_rejectNonEmptyWithoutForce`
+- [x] **Verification D — `AddBucketAlias` of alias owned by another
+      bucket.** Resolved: HTTP 400 with body
+      `"Alias X already exists and points to different bucket: <id>"`.
+      Resource passes `APIError.Message` through verbatim to Terraform's
+      diag — no custom wrapping needed
+- [x] Capture verifications as scratch test functions inside
+      `internal/client/livecheck_test.go` (build-tag `garageprobe`,
+      separate from the main acceptance suite — runnable on demand via
+      `go test -tags=garageprobe -run TestLiveBucket ./internal/client/...`).
+      Location chosen over the original `internal/resources/bucket/`
+      because that package doesn't exist until Phase 3, and the
+      verifications test client behavior anyway
+- [x] Replaced DESIGN-0002 §Decisions text on items 2, 3, 4 with the
+      resolved findings; item 5 (force_destroy mechanics) updated to
+      point at Phase 6 for the live verification. Commit doc + livecheck
+      file together
 
 #### Success Criteria
 
-- All four behaviors documented in DESIGN-0002 §Decisions with the actual
-  observed behavior (status code, response body shape, ordering
-  implications)
-- `livecheck_test.go` compiles and passes against a live container when
-  the `garageprobe` build tag is set
+- Three of four behaviors documented in DESIGN-0002 §Decisions with the
+  observed status code, response body shape, and ordering implications
+- Verification C deferred to Phase 6 (depends on Phase 6 infrastructure)
+- `livecheck_test.go` compiles and passes against a live container under
+  `-tags=garageprobe` (all 3 probes green in 11.2s wall-time)
 - No production code depends on the build-tagged tests; default builds
   ignore them
 
@@ -464,7 +468,7 @@ provider docs; CI green on the PR.
 | `internal/resources/bucket/model.go`                          | Create | Phase 3 — Model struct + conversion helpers                    |
 | `internal/resources/bucket/model_test.go`                     | Create | Phase 3 — round-trip tests                                     |
 | `internal/resources/bucket/resource_test.go`                  | Create | Phase 4 — acceptance test suite (grows phase by phase)         |
-| `internal/resources/bucket/livecheck_test.go`                 | Create | Phase 2 — build-tagged probe tests                             |
+| `internal/client/livecheck_test.go`                           | Create | Phase 2 — build-tagged probe tests (next to the methods under test) |
 | `internal/resources/bucket/s3empty.go`                        | Create | Phase 6 — `aws-sdk-go-v2`-backed bucket-emptying helper        |
 | `internal/provider/provider.go`                               | Modify | Phase 4 — register the resource; Phase 6 — add `s3_*` attrs    |
 | `go.mod` / `go.sum`                                           | Modify | Phase 6 — add `aws-sdk-go-v2` and its `config`/`credentials`/`service/s3` subpackages |
@@ -480,7 +484,7 @@ provider docs; CI green on the PR.
 |---------------|-----------------------------------------------------------|----------|
 | Unit          | `internal/client/client_test.go` (6 new method tests)     | Phase 1  |
 | Unit          | `internal/resources/bucket/model_test.go`                 | Phase 3  |
-| Live probe    | `internal/resources/bucket/livecheck_test.go` (tagged)    | Phase 2  |
+| Live probe    | `internal/client/livecheck_test.go` (tagged)              | Phase 2  |
 | Acceptance    | `internal/resources/bucket/resource_test.go`              | 4-8      |
 | CI acceptance | matrix over TF 1.13 + 1.14 (already wired in Phase 1)     | Phase 8  |
 | Docs drift    | `generate` job in CI (already present)                    | Phase 8  |

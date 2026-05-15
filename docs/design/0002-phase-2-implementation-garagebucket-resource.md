@@ -299,15 +299,18 @@ ones cover the cases:
 | Garage behavior                            | Sentinel              | Resource handling                       |
 |--------------------------------------------|-----------------------|------------------------------------------|
 | GetBucketInfo on deleted bucket            | `ErrNotFound`         | Read: remove from state (drift cleanup)  |
-| CreateBucket with duplicate global alias   | likely 4xx (probably 409 or 400) | Create: bubble up as plan error |
-| DeleteBucket on non-empty without force    | likely 4xx            | Delete: surface diag with `force_destroy` hint |
-| AddBucketAlias of existing alias on same bucket | likely 2xx (idempotent) — verify | No-op |
-| AddBucketAlias of alias owned by another bucket | likely 4xx          | Update: surface diag                     |
+| CreateBucket with duplicate global alias   | n/a (Create body is empty; alias adds happen separately) | Create: bubble up at AddBucketAlias step |
+| DeleteBucket on non-empty without force    | 4xx (spec)            | Delete: surface diag with `force_destroy` hint |
+| AddBucketAlias of existing alias on same bucket | 2xx (verified — idempotent no-op) | No-op |
+| AddBucketAlias of alias owned by another bucket | 4xx HTTP 400 (verified — body names the conflicting alias and foreign bucket id) | Update: pass `.Message` through to diag verbatim |
+| RemoveBucketAlias of last alias            | 4xx HTTP 400 (verified — `"Bucket X doesn't have other aliases, please delete it instead of just unaliasing."`) | Update: pass `.Message` through; surfaces correctly under adds-before-removes |
 
-**Implementation note:** before writing the Update path, write a small
-exploratory test in `internal/client/client_test.go` (or as part of the
-acceptance suite) to confirm the actual response codes for the question-marked
-rows above. Document the findings inline.
+**Implementation note:** behaviors above were verified against
+`dxflrs/garage:v2.3.0` via build-tagged probes in
+`internal/client/livecheck_test.go` (`go test -tags=garageprobe`). The
+findings ground the diag-pass-through strategy: Garage's error bodies
+are detailed enough that the resource simply surfaces `APIError.Message`
+verbatim rather than crafting bespoke text per error case.
 
 ### Client wrapper extensions
 
@@ -461,32 +464,38 @@ in IMPL-0002, not blockers for this design.
    single-alias case. Re-evaluate if benchmarks ever show the extra hop is
    a meaningful cost.
 
-2. **Alias rename order.** Adds-before-removes is the working hypothesis
-   for sidestepping any "last alias on the bucket" guard Garage may
-   enforce. Verify the actual behavior during IMPL-0002 (a 5-line
-   exploratory test against the live admin API). If Garage doesn't care,
-   the ordering is harmless; if it does, we're already on the safe path.
+2. **Alias rename order.** Adds-before-removes — verified against
+   `dxflrs/garage:v2.3.0`. Garage refuses last-alias removal with HTTP 400
+   `"Bucket X doesn't have other aliases, please delete it instead of
+   just unaliasing."`. Adds-before-removes sidesteps this by keeping the
+   bucket reachable throughout the diff; a rename (add new + remove old)
+   never transits the "zero aliases" state. A diff that *only* removes
+   aliases will surface Garage's error message verbatim, which is
+   already actionable.
 
-3. **AddBucketAlias of existing alias on the same bucket.** Treat as
-   idempotent in the wrapper (2xx → no-op). If implementation reveals
-   Garage returns 4xx for the same-bucket case, wrap it as a benign error
-   and swallow it in the Update path. Decision is reversible — the wrapper
-   absorbs the difference either way.
+3. **AddBucketAlias of existing alias on the same bucket.** Verified
+   idempotent — the second AddBucketAlias call returns 2xx with no
+   side effect. No wrapper-level absorption needed; the resource can
+   safely re-issue a known-existing alias on retry without inspecting
+   the response.
 
 4. **AddBucketAlias of alias owned by another bucket.** No dedicated
-   `ErrAliasConflict` sentinel in Phase 2. The generic `APIError` with the
-   Garage error body in `.Message` is sufficient signal for the resource
-   to surface a clean diag ("alias 'foo' is already in use by bucket 'bar'").
-   Add a typed sentinel later if users repeatedly need to switch on this
-   condition.
+   `ErrAliasConflict` sentinel in Phase 2. Verified: Garage returns
+   HTTP 400 with `"Alias X already exists and points to different
+   bucket: <id>"` — names the conflicting alias and the foreign bucket
+   id, so the resource passes `APIError.Message` through verbatim to
+   Terraform's diag. Add a typed sentinel later if users repeatedly
+   need to switch on this condition (unlikely — the message is
+   self-explanatory).
 
-5. **`force_destroy` mechanics.** Phase 2 assumes Garage's `DeleteBucket`
-   either empties the bucket itself or accepts a force/recursive flag.
-   Verify in IMPL-0002 against the live API. Fallback if not: add an
-   `internal/acctest/`-scoped helper that empties via the S3 data plane
-   using minio-go and the fixture's default access/secret keys, then
-   `DeleteBucket`. Either path satisfies the resource semantics; only the
-   implementation differs.
+5. **`force_destroy` mechanics.** Spec text confirms `DeleteBucket`
+   refuses non-empty buckets. Live verification of the exact error
+   shape is deferred to IMPL-0002 Phase 6, which gates on the
+   `aws-sdk-go-v2` integration (needed to make a bucket non-empty via
+   S3 PUT). Phase 6 wires the resource to empty the bucket via S3
+   `DeleteObjects` before calling `DeleteBucket`. `minio-go` was
+   rejected — see IMPL-0002 §Decisions #1 for the licensing /
+   vendor-trajectory analysis.
 
 6. **CORS, lifecycle, website attributes deferred.** Confirmed deferred.
    Phase 2's schema does not expose them; UpdateBucket sends them as `nil`
@@ -514,18 +523,20 @@ in IMPL-0002, not blockers for this design.
 
 ## Open Questions
 
-None — all initial open questions resolved into the Decisions section above.
-Four verifications remain as in-implementation tasks in IMPL-0002 rather
-than design blockers:
+None — all initial open questions resolved into the Decisions section
+above. Three of the four in-implementation verifications were resolved
+in IMPL-0002 Phase 2 (build-tagged probes in
+`internal/client/livecheck_test.go`); the fourth depends on Phase 6
+infrastructure:
 
-- **[IMPL-0002]** Does Garage refuse to remove the last global alias?
-- **[IMPL-0002]** Is `AddBucketAlias` idempotent for an alias already on
-  the same bucket?
-- **[IMPL-0002]** Does `DeleteBucket` empty non-empty buckets, or do we
-  need to enumerate-and-delete via the S3 data plane?
-- **[IMPL-0002]** What HTTP status code does Garage emit for
-  `AddBucketAlias` against an alias owned by another bucket? (Affects
-  error-mapping diag clarity, not control flow.)
+- ✅ Garage refuses last-global-alias removal (HTTP 400, message above)
+- ✅ `AddBucketAlias` is idempotent on the same bucket (2xx no-op)
+- 🔜 **[IMPL-0002 Phase 6]** Exact error response shape from
+  `DeleteBucket` on a non-empty bucket. Spec text says it refuses;
+  shape capture needs an S3 PUT to make a bucket non-empty, which
+  depends on the `aws-sdk-go-v2` integration Phase 6 introduces
+- ✅ Foreign-alias takeover refused (HTTP 400, message names the
+  conflicting alias + foreign bucket id)
 
 ## References
 
