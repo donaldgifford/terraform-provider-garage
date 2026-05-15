@@ -232,28 +232,33 @@ doesn't see HTTP-level concerns.
 
 #### Tasks
 
-- [ ] Write `internal/client/client.go` with:
+- [x] Write `internal/client/client.go` with:
   - `type Client struct { api *openapi.ClientWithResponses; endpoint string }`
   - `func New(endpoint, token string) (*Client, error)` — performs only
-        cheap validation (URL parseable, token non-empty); does **not** make
-        a network call. Constructs the generated client with a
-        `RequestEditorFn` that injects `Authorization: Bearer <token>`
-        (verify the header name against the spec's `securitySchemes` while
-        wiring this — expected to be standard `bearerAuth`)
-  - `func (c *Client) GetClusterStatus(ctx context.Context) (*ClusterStatus, error)`
-- [ ] Define typed error sentinels: `ErrNotFound`, `ErrUnauthorized`,
-      `ErrForbidden`, `ErrServerError`
-- [ ] Implement retry-on-5xx with exponential backoff: **3 attempts max,
+        cheap validation (URL parseable, http(s) scheme, token non-empty);
+        does **not** make a network call. Constructs the generated client
+        with a `RequestEditorFn` that injects `Authorization: Bearer <token>`
+  - `func (c *Client) GetClusterStatus(ctx context.Context) (*openapi.GetClusterStatusResponse, error)`
+  - `func (c *Client) Endpoint() string` — accessor used by acctest fixtures
+- [x] Define typed error sentinels: `ErrNotFound`, `ErrUnauthorized`,
+      `ErrForbidden`, `ErrServerError`. `APIError` struct wraps a sentinel
+      with the HTTP status code, body message, and operation name; supports
+      `errors.Is` against the sentinel
+- [x] Implement retry-on-5xx with exponential backoff: **3 attempts max,
       250ms base, 2x multiplier** (so 250ms → 500ms → 1000ms; worst-case
-      ~1.75s total wait)
-- [ ] Retry only **idempotent verbs** (GET, HEAD). POST/PUT/DELETE 5xx
-      responses pass through immediately to avoid risking duplicate
-      server-side side effects (e.g. duplicate `CreateKey`)
-- [ ] Map HTTP error codes → typed errors in a single helper function
-- [ ] Wire `tflog.Trace` / `tflog.Debug` for each request/response cycle
-- [ ] Write unit tests for retry behavior using `httptest.NewServer`
-- [ ] Write unit tests for error mapping (each typed error sentinel reachable)
-- [ ] Run `just test` — verify wrapper coverage
+      ~1.75s total wait). Implemented as an `http.RoundTripper` wrapper
+      at `internal/client/transport.go` so retry policy is centralized
+- [x] Retry only **idempotent verbs** (GET, HEAD, OPTIONS). POST/PUT/PATCH/
+      DELETE 5xx responses pass through immediately to avoid risking
+      duplicate server-side side effects
+- [x] Map HTTP error codes → typed errors in `statusToError()` helper in
+      `internal/client/errors.go`
+- [x] Wire `tflog.Trace` for request/response cycles in client methods,
+      `tflog.Debug` for retry attempts
+- [x] Write unit tests for retry behavior using `httptest.NewServer`
+- [x] Write unit tests for error mapping (each typed error sentinel reachable)
+- [x] Run `just test` — verify wrapper coverage (~0.76s per retry test;
+      all tests pass)
 
 #### Success Criteria
 
