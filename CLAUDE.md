@@ -65,7 +65,22 @@ GoReleaser (`.goreleaser.yml`) builds the registry-shaped artifact set: multi-OS
 
 `GPG_FINGERPRINT` + `GPG_PRIVATE_KEY` repo secrets must be set before the first release — see ADR-0004 (deferred).
 
+## Licensing and file headers
+
+**License: MPL-2.0** per [ADR-0007](docs/adr/0007-provider-license-mpl-20-over-apache-20.md) — matches OpenTofu, pre-BSL Terraform, and the broader provider ecosystem.
+
+Every Go source file (including build-only files under `tools/`) carries this two-line header:
+
+```go
+// Copyright (c) 2026 Donald Gifford
+// SPDX-License-Identifier: MPL-2.0
+```
+
+- Copyright year is fixed at the year of original authorship (2026); authorship attribution lives in git history, not the header.
+- The `LICENSE` file at the repo root holds the full MPL-2.0 text. Non-Go files (Markdown, YAML, JSON, HCL) do not carry inline SPDX headers; the repo-level `LICENSE` applies project-wide.
+- Files derived from MPL-2.0 third-party sources (e.g. HashiCorp scaffolding) retain their upstream copyright header alongside ours.
+- The vendored `internal/client/openapi/garage-admin-v2.json` is unmodified from Garage HQ's published version; `oapi-codegen`-generated Go code (`generated.go`) carries our standard MPL-2.0 header — interface specs are not copyrightable software, so AGPL terms on the upstream Garage source don't propagate to generated client code.
+
 ## Open template carryovers worth knowing
 
 - `.forge-lock.yaml` was deleted, so `forge sync` will no longer overwrite files here. Re-adding it ties the repo back to the `go-ext` blueprint.
-- Forge's `LICENSE`/copyright story is **Apache-2.0**, but RFC `docs/repo-init.md` §6 argues for **MPL-2.0** (matches OpenTofu, pre-BSL Terraform, the broader provider ecosystem). License hasn't been chosen yet — confirm with the user before adding copyright headers.

@@ -109,11 +109,11 @@ other three are ratifications of decisions already captured as notes in
 
 #### Tasks
 
-- [ ] Author **ADR-0007: Provider license — Apache-2.0 vs MPL-2.0**
+- [x] Author **ADR-0007: Provider license — Apache-2.0 vs MPL-2.0** → decided MPL-2.0; status Accepted
 - [ ] Author **ADR-0002: Use terraform-plugin-framework over SDKv2** from notes
 - [ ] Author **ADR-0003: OpenAPI-generated client via oapi-codegen** from notes
 - [ ] Author **ADR-0005: testcontainers-go for acceptance tests** from notes
-- [ ] Run `docz update adr` to refresh the ADR index
+- [x] Run `docz update adr` to refresh the ADR index
 - [ ] If MPL-2.0 selected: add `SPDX-License-Identifier: MPL-2.0` to the
       file-header convention; otherwise document Apache-2.0 convention
 - [ ] Update the file header in `tools/tools.go` to match chosen license

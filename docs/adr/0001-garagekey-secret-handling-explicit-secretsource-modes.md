@@ -11,23 +11,21 @@ created: 2026-05-11
 # 0001. garage_key secret handling: explicit secret_source modes
 
 <!--toc:start-->
-
-- [0001. garage_key secret handling: explicit secret_source modes](#0001-garagekey-secret-handling-explicit-secretsource-modes)
-  - [Status](#status)
-  - [Context](#context)
-  - [Decision](#decision)
-    - [Schema](#schema)
-    - [Behavior](#behavior)
-    - [Rotation](#rotation)
-    - [Import](#import)
-    - [Example usage](#example-usage)
-  - [Consequences](#consequences)
-    - [Positive](#positive)
-    - [Negative](#negative)
-    - [Neutral](#neutral)
-  - [Alternatives Considered](#alternatives-considered)
-  - [References](#references)
-  <!--toc:end-->
+- [Status](#status)
+- [Context](#context)
+- [Decision](#decision)
+  - [Schema](#schema)
+  - [Behavior](#behavior)
+  - [Rotation](#rotation)
+  - [Import](#import)
+  - [Example usage](#example-usage)
+- [Consequences](#consequences)
+  - [Positive](#positive)
+  - [Negative](#negative)
+  - [Neutral](#neutral)
+- [Alternatives Considered](#alternatives-considered)
+- [References](#references)
+<!--toc:end-->
 
 ## Status
 
