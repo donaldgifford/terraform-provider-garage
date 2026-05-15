@@ -57,7 +57,7 @@ jobs:
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: donaldgifford/
+          slug: donaldgifford/terraform-provider-garage
         continue-on-error: true
 
   security:
@@ -81,7 +81,7 @@ jobs:
           go-package: ./...
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -128,7 +128,7 @@ jobs:
         run: just generate
 
       - name: Fail on uncommitted drift
-        run: |
+        run: |-
           git diff --compact-summary --exit-code || {
             echo
             echo "Unexpected difference after 'just generate'. Run it locally and commit."

@@ -33,3 +33,6 @@ go.work.sum
 
 # Build directories
 build/
+
+# Claude Code donald-loop state
+.claude/donald-loop.local.md
