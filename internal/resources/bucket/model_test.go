@@ -4,9 +4,12 @@
 package bucket
 
 import (
+	"context"
+	"sort"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/donaldgifford/terraform-provider-garage/internal/client/openapi"
@@ -179,6 +182,100 @@ func TestApplyBucketInfoToModel_emptyAliases(t *testing.T) {
 	if n := len(m.GlobalAliases.Elements()); n != 0 {
 		t.Fatalf("GlobalAliases len = %d, want 0", n)
 	}
+}
+
+// TestDiffGlobalAliases covers the four meaningful states of an alias
+// diff that Update consumes per DESIGN-0002 §Update flow.
+func TestDiffGlobalAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		plan       []string
+		state      []string
+		wantAdd    []string
+		wantRemove []string
+	}{
+		{name: "no change", plan: []string{"a"}, state: []string{"a"}, wantAdd: nil, wantRemove: nil},
+		{name: "add only", plan: []string{"a", "b"}, state: []string{"a"}, wantAdd: []string{"b"}, wantRemove: nil},
+		{name: "remove only", plan: []string{"a"}, state: []string{"a", "b"}, wantAdd: nil, wantRemove: []string{"b"}},
+		{name: "rename", plan: []string{"new"}, state: []string{"old"}, wantAdd: []string{"new"}, wantRemove: []string{"old"}},
+		{name: "empty plan", plan: nil, state: []string{"a"}, wantAdd: nil, wantRemove: []string{"a"}},
+		{name: "empty state", plan: []string{"a"}, state: nil, wantAdd: []string{"a"}, wantRemove: nil},
+		{name: "both empty", plan: nil, state: nil, wantAdd: nil, wantRemove: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			planSet := stringsToSet(t, tt.plan)
+			stateSet := stringsToSet(t, tt.state)
+
+			add, remove, diags := diffGlobalAliases(context.Background(), planSet, stateSet)
+			if diags.HasError() {
+				t.Fatalf("diags: %v", diags)
+			}
+			sort.Strings(add)
+			sort.Strings(remove)
+			sort.Strings(tt.wantAdd)
+			sort.Strings(tt.wantRemove)
+			if !equalStrings(add, tt.wantAdd) {
+				t.Fatalf("add = %v, want %v", add, tt.wantAdd)
+			}
+			if !equalStrings(remove, tt.wantRemove) {
+				t.Fatalf("remove = %v, want %v", remove, tt.wantRemove)
+			}
+		})
+	}
+}
+
+// TestDiffGlobalAliases_nullSetsTreatedAsEmpty confirms that a
+// null-or-unknown Set on either side decodes as zero elements, not as
+// an error. State.GlobalAliases should never be null in practice after
+// Phase 4 Read; this is defensive.
+func TestDiffGlobalAliases_nullSetsTreatedAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	add, remove, diags := diffGlobalAliases(
+		context.Background(),
+		types.SetNull(types.StringType),
+		types.SetNull(types.StringType),
+	)
+	if diags.HasError() {
+		t.Fatalf("diags: %v", diags)
+	}
+	if len(add) != 0 || len(remove) != 0 {
+		t.Fatalf("add=%v remove=%v, want both empty", add, remove)
+	}
+}
+
+func stringsToSet(t *testing.T, s []string) types.Set {
+	t.Helper()
+	if s == nil {
+		return types.SetNull(types.StringType)
+	}
+	values := make([]attr.Value, 0, len(s))
+	for _, v := range s {
+		values = append(values, types.StringValue(v))
+	}
+	set, diags := types.SetValue(types.StringType, values)
+	if diags.HasError() {
+		t.Fatalf("stringsToSet: %v", diags)
+	}
+	return set
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // TestApplyBucketInfoToModel_zeroQuotaPreservedDistinctFromNull confirms

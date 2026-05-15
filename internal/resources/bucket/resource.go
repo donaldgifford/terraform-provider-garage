@@ -273,14 +273,69 @@ func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *res
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update is a stub — Phase 5 implements the real flow.
+// Update reconciles the bucket's aliases and quotas from state →
+// plan. Per DESIGN-0002 §Update flow and the Phase 2 live-API finding
+// (Garage refuses last-alias removal with HTTP 400), alias adds always
+// precede alias removes so a rename keeps the bucket reachable
+// throughout the diff. A pure-remove diff that empties the alias set
+// will surface Garage's verbatim error — that's the intended behavior.
 //
 //nolint:gocritic // UpdateRequest is the framework interface signature.
-func (*Resource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError(
-		"garage_bucket Update not yet implemented",
-		"This lifecycle method lands in IMPL-0002 Phase 5.",
-	)
+func (r *Resource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, state Model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketID := state.ID.ValueString()
+
+	toAdd, toRemove, diags := diffGlobalAliases(ctx, plan.GlobalAliases, state.GlobalAliases)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	for _, alias := range toAdd {
+		if err := r.client.AddBucketAlias(ctx, bucketID, alias); err != nil {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Failed to add global alias %q", alias),
+				err.Error(),
+			)
+			return
+		}
+	}
+	for _, alias := range toRemove {
+		if err := r.client.RemoveBucketAlias(ctx, bucketID, alias); err != nil {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("Failed to remove global alias %q", alias),
+				err.Error(),
+			)
+			return
+		}
+	}
+
+	if !plan.MaxSize.Equal(state.MaxSize) || !plan.MaxObjects.Equal(state.MaxObjects) {
+		if _, err := r.client.UpdateBucket(ctx, bucketID, modelToQuotas(&plan)); err != nil {
+			resp.Diagnostics.AddError("Failed to update bucket quotas", err.Error())
+			return
+		}
+	}
+
+	info, err := r.client.GetBucket(ctx, bucketID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to refresh bucket state after update", err.Error())
+		return
+	}
+
+	newState := plan
+	resp.Diagnostics.Append(applyBucketInfoToModel(info, &newState)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
 // Delete deletes the bucket. Phase 4 ships a minimal implementation

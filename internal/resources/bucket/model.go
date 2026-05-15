@@ -4,6 +4,7 @@
 package bucket
 
 import (
+	"context"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -88,4 +89,45 @@ func applyBucketInfoToModel(info *openapi.GetBucketInfoResponse, m *Model) diag.
 	}
 
 	return diags
+}
+
+// diffGlobalAliases decodes plan and state alias Sets and returns the
+// adds (plan ∖ state) and removes (state ∖ plan). Null or unknown
+// values on either side are treated as empty.
+//
+// Used by Update to drive AddBucketAlias-then-RemoveBucketAlias calls
+// in that order — see DESIGN-0002 §Update flow for why adds-before-
+// removes is essential (Garage refuses last-alias removal with HTTP 400).
+func diffGlobalAliases(ctx context.Context, plan, state types.Set) (add, remove []string, diags diag.Diagnostics) {
+	var planAliases, stateAliases []string
+	if !plan.IsNull() && !plan.IsUnknown() {
+		diags.Append(plan.ElementsAs(ctx, &planAliases, false)...)
+	}
+	if !state.IsNull() && !state.IsUnknown() {
+		diags.Append(state.ElementsAs(ctx, &stateAliases, false)...)
+	}
+	if diags.HasError() {
+		return nil, nil, diags
+	}
+
+	stateSet := make(map[string]struct{}, len(stateAliases))
+	for _, a := range stateAliases {
+		stateSet[a] = struct{}{}
+	}
+	planSet := make(map[string]struct{}, len(planAliases))
+	for _, a := range planAliases {
+		planSet[a] = struct{}{}
+	}
+
+	for _, a := range planAliases {
+		if _, ok := stateSet[a]; !ok {
+			add = append(add, a)
+		}
+	}
+	for _, a := range stateAliases {
+		if _, ok := planSet[a]; !ok {
+			remove = append(remove, a)
+		}
+	}
+	return add, remove, diags
 }
