@@ -451,26 +451,24 @@ Each step can be a separate commit / PR for reviewability.
 
 ## Open Questions
 
-1. **OpenAPI spec source URL.** Garage repo path? Mirror in
-   `eyebrowkang/garage-admin-console`? Decide during step 4 — prefer the
-   official Garage repo if the spec is committed there.
-2. **Garage version to pin.** Minimum: `v2.3.0` for `--single-node --default-bucket`.
-   Recommend latest stable `v2.x` at impl time, document upgrade procedure.
-3. **`oapi-codegen` major version.** v2 is current. Pin in `tools/go.mod`.
-4. **Admin token discovery in the testcontainers fixture.** Env-injection,
-   container log parsing, or pre-baked image? Spike during step 9.
-5. **Per-package vs per-test container lifecycle.** Default to per-package
-   (`TestMain`), reassess if tests start needing isolated state.
-6. **Retry strategy details.** 3 attempts, exponential backoff with what base?
-   Configurable via provider config attribute or hardcoded? Hardcode in Phase 1,
-   externalize later if needed.
-7. **OpenTofu CI matrix.** RFC-0001 §Publishing requires dual-CLI testing.
-   Adding `tofu` to the matrix now is cheap but adds noise if `setup-opentofu`
-   isn't quite the same shape as `setup-terraform`. Defer to Phase 2 unless
-   trivial.
-8. **License choice (Apache-2.0 vs MPL-2.0).** Tracked as ADR-0007 in step 1
-   above — flagged here because it's the only unresolved decision that blocks
-   writing the first line of Go code.
+All design-level open questions have been resolved. See **[IMPL-0001 §Decisions](../impl/0001-phase-1-provider-scaffold-openapi-client-smoke-test.md#decisions)**
+for the full resolution trail (13 items) and the reasoning behind each
+decision. Brief summary of design-level resolutions:
+
+| # | Topic                          | Resolution                                                                                                     |
+|---|--------------------------------|----------------------------------------------------------------------------------------------------------------|
+| 1 | OpenAPI spec source URL        | `https://garagehq.deuxfleurs.fr/api/garage-admin-v2.json` (auto-published by Garage HQ from `utoipa`)          |
+| 2 | Garage version pin             | Latest stable v2.x at impl time (currently v2.3.0 — meets `--single-node --default-bucket` minimum)             |
+| 3 | `oapi-codegen` major version   | v2; pin in `tools/go.mod`. Phase 3 first task verifies 3.1.0 spec compatibility                                 |
+| 4 | Admin token discovery          | Inject via `GARAGE_ADMIN_TOKEN` env, log-parse fallback if Garage v2.3.0 doesn't honor it                       |
+| 5 | Container lifecycle            | Per-test (`acctest.Start(t)` per `Test*`, with `t.Cleanup()`)                                                   |
+| 6 | Retry strategy                 | 3 attempts max, 250ms base, 2x multiplier; hardcoded, GET-only retry for idempotency safety                     |
+| 7 | OpenTofu CI matrix             | Deferred to a later phase — out of scope for Phase 1                                                            |
+| 8 | License (Apache-2.0 / MPL-2.0) | Tracked as ADR-0007, first task of IMPL-0001 Phase 1 (Foundational decisions)                                   |
+
+Implementation-level decisions (validation timing, URL validator, retry
+idempotency, example-file shape, etc.) are captured in IMPL-0001 §Decisions
+along with these.
 
 ## References
 

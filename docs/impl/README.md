@@ -28,4 +28,9 @@ docz create impl "Your Implementation Title"
 - **Cancelled**: Plan was abandoned
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All IMPLs
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| IMPL-0001 | Phase 1: provider scaffold, OpenAPI client, smoke test | Draft | 2026-05-15 | Donald Gifford | [0001-phase-1-provider-scaffold-openapi-client-smoke-test.md](0001-phase-1-provider-scaffold-openapi-client-smoke-test.md) |
 <!-- END DOCZ AUTO-GENERATED -->
