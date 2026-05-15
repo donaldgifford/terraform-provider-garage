@@ -14,6 +14,7 @@ package bucket
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -23,6 +24,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/donaldgifford/terraform-provider-garage/internal/client"
 )
@@ -152,25 +154,123 @@ func (r *Resource) Configure(_ context.Context, req resource.ConfigureRequest, r
 	r.client = c
 }
 
-// Create is a stub — Phase 4 of IMPL-0002 implements the real flow.
+// Create implements the three-step flow from DESIGN-0002 §Create flow:
+//
+//  1. CreateBucket — empty body; capture the new bucket id
+//  2. AddBucketAlias for each plan-declared global alias
+//  3. UpdateBucket if either quota is set in plan
+//
+// On any failure in steps 2-3, attempt a best-effort DeleteBucket
+// rollback. The bucket is empty at this point (no objects can have been
+// PUT yet), so DeleteBucket will succeed in the rollback path.
 //
 //nolint:gocritic // CreateRequest is the framework interface signature.
-func (*Resource) Create(_ context.Context, _ resource.CreateRequest, resp *resource.CreateResponse) {
-	resp.Diagnostics.AddError(
-		"garage_bucket Create not yet implemented",
-		"This lifecycle method lands in IMPL-0002 Phase 4. If you are seeing this error, "+
-			"the resource was registered prematurely in provider.Resources().",
-	)
+func (r *Resource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan Model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	created, err := r.client.CreateBucket(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create bucket", err.Error())
+		return
+	}
+	bucketID := created.Id
+
+	rollback := func(reason string) {
+		tflog.Warn(ctx, "rolling back partial bucket create", map[string]any{
+			"id":     bucketID,
+			"reason": reason,
+		})
+		if delErr := r.client.DeleteBucket(ctx, bucketID); delErr != nil {
+			tflog.Error(ctx, "rollback DeleteBucket failed", map[string]any{
+				"id":  bucketID,
+				"err": delErr.Error(),
+			})
+		}
+	}
+
+	if !plan.GlobalAliases.IsNull() && !plan.GlobalAliases.IsUnknown() {
+		var aliases []string
+		resp.Diagnostics.Append(plan.GlobalAliases.ElementsAs(ctx, &aliases, false)...)
+		if resp.Diagnostics.HasError() {
+			rollback("alias decode failed")
+			return
+		}
+		for _, alias := range aliases {
+			if err := r.client.AddBucketAlias(ctx, bucketID, alias); err != nil {
+				resp.Diagnostics.AddError(
+					fmt.Sprintf("Failed to add global alias %q", alias),
+					err.Error(),
+				)
+				rollback("AddBucketAlias failed")
+				return
+			}
+		}
+	}
+
+	quotas := modelToQuotas(&plan)
+	if quotas.MaxSize != nil || quotas.MaxObjects != nil {
+		if _, err := r.client.UpdateBucket(ctx, bucketID, quotas); err != nil {
+			resp.Diagnostics.AddError("Failed to set bucket quotas", err.Error())
+			rollback("UpdateBucket failed")
+			return
+		}
+	}
+
+	info, err := r.client.GetBucket(ctx, bucketID)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to refresh bucket state after create", err.Error())
+		rollback("post-create GetBucket failed")
+		return
+	}
+
+	state := plan
+	resp.Diagnostics.Append(applyBucketInfoToModel(info, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Read is a stub — Phase 4 implements the real flow.
+// Read fetches authoritative bucket state from Garage and overlays it
+// onto the model. On ErrNotFound (the bucket was deleted out-of-band),
+// removes the resource from state so the next plan recreates it.
+// force_destroy is preserved from prior state — it's provider-local and
+// not represented in the API response.
 //
 //nolint:gocritic // ReadRequest is the framework interface signature.
-func (*Resource) Read(_ context.Context, _ resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError(
-		"garage_bucket Read not yet implemented",
-		"This lifecycle method lands in IMPL-0002 Phase 4.",
-	)
+func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state Model
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	info, err := r.client.GetBucket(ctx, state.ID.ValueString())
+	if errors.Is(err, client.ErrNotFound) {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read bucket", err.Error())
+		return
+	}
+
+	forceDestroy := state.ForceDestroy
+	resp.Diagnostics.Append(applyBucketInfoToModel(info, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.ForceDestroy = forceDestroy
+	if state.ForceDestroy.IsNull() || state.ForceDestroy.IsUnknown() {
+		state.ForceDestroy = types.BoolValue(false)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update is a stub — Phase 5 implements the real flow.
@@ -183,12 +283,32 @@ func (*Resource) Update(_ context.Context, _ resource.UpdateRequest, resp *resou
 	)
 }
 
-// Delete is a stub — Phase 6 implements the real flow.
+// Delete deletes the bucket. Phase 4 ships a minimal implementation
+// that handles the empty-bucket case via the admin API only — needed
+// for the Phase 4 acceptance tests to clean up after themselves.
+// Phase 6 extends this with force_destroy + S3 data-plane emptying
+// for non-empty buckets.
 //
 //nolint:gocritic // DeleteRequest is the framework interface signature.
-func (*Resource) Delete(_ context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError(
-		"garage_bucket Delete not yet implemented",
-		"This lifecycle method lands in IMPL-0002 Phase 6.",
-	)
+func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state Model
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	bucketID := state.ID.ValueString()
+	if bucketID == "" {
+		return
+	}
+
+	if err := r.client.DeleteBucket(ctx, bucketID); err != nil {
+		resp.Diagnostics.AddError(
+			"Failed to delete bucket",
+			err.Error()+
+				"\n\nNote: in IMPL-0002 Phase 4 this resource only handles empty-bucket "+
+				"deletion. Phase 6 adds force_destroy + S3 data-plane emptying for "+
+				"non-empty buckets.",
+		)
+	}
 }

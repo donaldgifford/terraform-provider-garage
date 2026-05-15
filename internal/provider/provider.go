@@ -24,6 +24,7 @@ import (
 
 	"github.com/donaldgifford/terraform-provider-garage/internal/client"
 	"github.com/donaldgifford/terraform-provider-garage/internal/datasources/clusterinfo"
+	"github.com/donaldgifford/terraform-provider-garage/internal/resources/bucket"
 )
 
 // Environment variables consulted as fallback when the corresponding
@@ -164,10 +165,13 @@ func (*GarageProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	resp.ResourceData = c
 }
 
-// Resources returns the resource constructors the provider exposes. Empty
-// until Phase 2 of RFC-0001 introduces garage_bucket et al.
+// Resources returns the resource constructors the provider exposes.
+// Grows as later RFC-0001 phases add garage_key, garage_bucket_key,
+// and garage_bucket_alias.
 func (*GarageProvider) Resources(_ context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		bucket.New,
+	}
 }
 
 // DataSources returns the data-source constructors the provider exposes.
