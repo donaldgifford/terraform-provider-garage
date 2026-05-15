@@ -114,9 +114,13 @@ other three are ratifications of decisions already captured as notes in
 - [x] Author **ADR-0003: OpenAPI-generated client via oapi-codegen** from notes → Accepted
 - [x] Author **ADR-0005: testcontainers-go for acceptance tests** from notes → Accepted
 - [x] Run `docz update adr` to refresh the ADR index
-- [ ] If MPL-2.0 selected: add `SPDX-License-Identifier: MPL-2.0` to the
-      file-header convention; otherwise document Apache-2.0 convention
-- [ ] Update the file header in `tools/tools.go` to match chosen license
+- [x] If MPL-2.0 selected: add `SPDX-License-Identifier: MPL-2.0` to the
+      file-header convention; otherwise document Apache-2.0 convention →
+      MPL-2.0 chosen; convention documented in ADR-0007 §File-header
+      convention and CLAUDE.md §Licensing and file headers. `LICENSE` at
+      repo root holds the canonical MPL-2.0 text fetched from mozilla.org.
+- [x] Update the file header in `tools/tools.go` to match chosen license →
+      `// Copyright (c) 2026 Donald Gifford` + `// SPDX-License-Identifier: MPL-2.0`
 
 #### Success Criteria
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Donald Gifford
+// SPDX-License-Identifier: MPL-2.0
+
 //go:build generate
 
 // Package tools pins build-only dependencies (tfplugindocs) as indirect
