@@ -32,5 +32,6 @@ docz create adr "Your ADR Title"
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | ADR-0001 | garage_key secret handling: explicit secret_source modes | Proposed | 2026-05-11 | Donald Gifford | [0001-garagekey-secret-handling-explicit-secretsource-modes.md](0001-garagekey-secret-handling-explicit-secretsource-modes.md) |
+| ADR-0002 | Use terraform-plugin-framework over SDKv2 | Accepted | 2026-05-15 | Donald Gifford | [0002-use-terraform-plugin-framework-over-sdkv2.md](0002-use-terraform-plugin-framework-over-sdkv2.md) |
 | ADR-0007 | Provider license: MPL-2.0 over Apache-2.0 | Accepted | 2026-05-15 | Donald Gifford | [0007-provider-license-mpl-20-over-apache-20.md](0007-provider-license-mpl-20-over-apache-20.md) |
 <!-- END DOCZ AUTO-GENERATED -->
