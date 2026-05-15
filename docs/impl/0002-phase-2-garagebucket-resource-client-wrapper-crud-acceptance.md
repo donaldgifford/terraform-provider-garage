@@ -111,26 +111,31 @@ shape and conventions.
 
 #### Tasks
 
-- [ ] Add `func (c *Client) CreateBucket(ctx context.Context) (*openapi.GetBucketInfoResponse, error)`
+- [x] Add `func (c *Client) CreateBucket(ctx context.Context) (*openapi.GetBucketInfoResponse, error)`
       — empty request body, returns the new bucket info
-- [ ] Add `func (c *Client) GetBucket(ctx context.Context, id string) (*openapi.GetBucketInfoResponse, error)`
+- [x] Add `func (c *Client) GetBucket(ctx context.Context, id string) (*openapi.GetBucketInfoResponse, error)`
       — issues `GetBucketInfo?id=<id>`, maps `ErrNotFound` for HTTP 404
-- [ ] Add `func (c *Client) UpdateBucket(ctx context.Context, id string, quotas *openapi.ApiBucketQuotas) (*openapi.GetBucketInfoResponse, error)`
+- [x] Add `func (c *Client) UpdateBucket(ctx context.Context, id string, quotas *openapi.ApiBucketQuotas) (*openapi.GetBucketInfoResponse, error)`
       — body shape per DESIGN-0002 §Quota semantics; CORS / lifecycle /
       website fields sent as `nil`
-- [ ] Add `func (c *Client) DeleteBucket(ctx context.Context, id string) error`
-      — no return body on 2xx
-- [ ] Add `func (c *Client) AddBucketAlias(ctx context.Context, bucketID, globalAlias string) error`
+- [x] Add `func (c *Client) DeleteBucket(ctx context.Context, id string) error`
+      — no return body on 2xx (Garage uses RPC-style POST for delete,
+      surfaced in the test as an explicit method assertion)
+- [x] Add `func (c *Client) AddBucketAlias(ctx context.Context, bucketID, globalAlias string) error`
       — body is `BucketAliasEnum0 { BucketId, GlobalAlias }`
-- [ ] Add `func (c *Client) RemoveBucketAlias(ctx context.Context, bucketID, globalAlias string) error`
-- [ ] Unit tests in `internal/client/client_test.go` for each method:
+- [x] Add `func (c *Client) RemoveBucketAlias(ctx context.Context, bucketID, globalAlias string) error`
+- [x] Unit tests in `internal/client/client_test.go` for each method:
   - Happy path returns expected struct
   - 404 maps to `ErrNotFound` (Get only)
   - 401 / 403 map to `ErrUnauthorized` / `ErrForbidden`
   - Retry-on-5xx behavior preserved for GetBucket (idempotent verb)
   - POST/DELETE methods pass through 5xx with no retry
-- [ ] Run `just lint` / `just test` — verify all green
-- [ ] Commit as `feat: add bucket client wrapper methods (IMPL-0002 Phase 1)`
+  - Quota body shape (nil / empty / literal-zero / non-zero) round-trips
+    correctly through `UpdateBucket`
+  - Empty-arg validation gate for id / bucketID / globalAlias
+- [x] Run `just lint` / `just test` — verify all green (0 lint issues;
+      84.2% client coverage)
+- [x] Commit as `feat: add bucket client wrapper methods (IMPL-0002 Phase 1)`
 
 #### Success Criteria
 
