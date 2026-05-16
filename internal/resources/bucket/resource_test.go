@@ -440,6 +440,44 @@ resource "garage_bucket" "test" {
 	})
 }
 
+// TestAccGarageBucket_import — IMPL-0002 Phase 7. Bare-id import
+// round-trips cleanly: ImportState passes the id through to state, the
+// subsequent Read populates everything else from Garage, and
+// ImportStateVerify confirms the imported state matches the
+// pre-import state attribute-by-attribute.
+func TestAccGarageBucket_import(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	config := acctest.TestAccProviderConfig(g) + `
+resource "garage_bucket" "test" {
+  global_aliases = ["import-test-alpha", "import-test-beta"]
+  max_size       = 4096
+  max_objects    = 25
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.test", "global_aliases.#", "2"),
+				),
+			},
+			{
+				Config:            config,
+				ResourceName:      "garage_bucket.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 // TestAccGarageBucket_driftDetection verifies the Read drift-cleanup
 // path: an alias removed out-of-band (via a direct admin API call)
 // surfaces in the next plan as a diff that re-adds the alias.

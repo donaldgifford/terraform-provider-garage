@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -29,12 +30,11 @@ import (
 	"github.com/donaldgifford/terraform-provider-garage/internal/client"
 )
 
-// Compile-time interface assertions. Phase 7 adds
-// resource.ResourceWithImportState; assertion gets added with that
-// phase's commit.
+// Compile-time interface assertions.
 var (
-	_ resource.Resource              = (*Resource)(nil)
-	_ resource.ResourceWithConfigure = (*Resource)(nil)
+	_ resource.Resource                = (*Resource)(nil)
+	_ resource.ResourceWithConfigure   = (*Resource)(nil)
+	_ resource.ResourceWithImportState = (*Resource)(nil)
 )
 
 // Resource is the framework implementation of garage_bucket.
@@ -432,4 +432,18 @@ func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 	if err := r.client.DeleteBucket(ctx, bucketID); err != nil {
 		resp.Diagnostics.AddError("Failed to delete bucket after force-empty", err.Error())
 	}
+}
+
+// ImportState handles `terraform import garage_bucket.<name> <bucket_id>`.
+// Passes the bare bucket id through to state's `id` attribute; the
+// subsequent Read populates the rest of the schema from Garage's
+// authoritative response. force_destroy is provider-local and not
+// derivable from Garage — Read defaults it to false on import.
+//
+// Per DESIGN-0002 §Import + IMPL-0002 §Decisions #8, no client-side
+// id-format validation: Garage may change the id shape across versions,
+// and the Read round-trip already surfaces a clean "not found" error
+// for malformed ids.
+func (*Resource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

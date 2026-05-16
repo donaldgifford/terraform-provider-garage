@@ -429,26 +429,30 @@ fewer commits.
 
 #### Tasks
 
-- [ ] Implement `ImportState()`:
-  - Validate the import ID is a non-empty hex string (Garage bucket IDs
-    are 64-char hex; accept any non-empty string and let `Read` surface
-    "not found" if it's malformed)
-  - `resp.State.SetAttribute(ctx, path.Root("id"), req.ID)`
-  - Default `force_destroy` to false (provider-only attribute, not
-    derivable from Garage)
-- [ ] Acceptance test `TestAccGarageBucket_import`:
-  - Step 1: create a bucket with aliases + quotas
-  - Step 2: `ImportStateVerify` against the bucket ID; expect all
-    attributes to match
-- [ ] Run all gates green
-- [ ] Commit as `feat: garage_bucket ImportState (IMPL-0002 Phase 7)`
+- [x] Implement `ImportState()` via the framework's
+      `resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)`
+      — passes the bare bucket id through to state. The subsequent
+      Read populates everything else from Garage's authoritative
+      response; `force_destroy` defaults to false via Read's null-handling
+      (the attribute has `Default: booldefault.StaticBool(false)` in
+      the schema, and Read explicitly defaults null/unknown state values
+      to `false`). No client-side id-format validation per OQ #8
+- [x] Added `resource.ResourceWithImportState` compile-time interface
+      assertion alongside the existing Resource / ResourceWithConfigure
+      assertions
+- [x] Acceptance test `TestAccGarageBucket_import`:
+  - Step 1: create a bucket with two aliases + both quotas
+  - Step 2: `ImportStateVerify` against the bucket id — framework
+    confirms every attribute matches between the imported and
+    pre-import state
+- [x] Run all gates green — test passes in ~12s; lint clean
+- [x] Commit as `feat: garage_bucket ImportState (IMPL-0002 Phase 7)`
 
 #### Success Criteria
 
 - Import by bucket ID round-trips: imported state matches the original
-  resource state byte-for-byte (aside from `force_destroy`, which is
-  always false on import)
-- `TestAccGarageBucket_import` passes
+  resource state attribute-for-attribute, including aliases and quotas ✓
+- `TestAccGarageBucket_import` passes ✓
 
 ---
 
