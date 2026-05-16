@@ -164,12 +164,11 @@ code that consumes the answers. Findings get folded into IMPL-0002 §Decisions
 - [x] **Verification B — `AddBucketAlias` idempotency for same bucket.**
       Resolved: 2xx no-op. Safe to re-issue on Create-rollback retries
       without inspecting the response
-- [ ] **Verification C — `DeleteBucket` on non-empty bucket.** Deferred
-      to Phase 6 — needs an S3 PUT to make the bucket non-empty, which
-      depends on the `aws-sdk-go-v2` setup Phase 6 introduces. Spec text
-      already confirms refuse behavior; the remaining "capture error
-      shape" lands in Phase 6's
-      `TestAccGarageBucket_rejectNonEmptyWithoutForce`
+- [x] **Verification C — `DeleteBucket` on non-empty bucket.** Resolved
+      in Phase 6 via `TestAccGarageBucket_rejectNonEmptyWithoutForce`:
+      Garage returns HTTP 400 and the resource surfaces the refusal as
+      a diagnostic; force_destroy=true path then empties via S3 and
+      deletes cleanly
 - [x] **Verification D — `AddBucketAlias` of alias owned by another
       bucket.** Resolved: HTTP 400 with body
       `"Alias X already exists and points to different bucket: <id>"`.
