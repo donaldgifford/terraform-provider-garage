@@ -557,6 +557,55 @@ func TestAddBucketAlias_success(t *testing.T) {
 	}
 }
 
+func TestAllowBucketKey_success(t *testing.T) {
+	t.Parallel()
+
+	var seenBody atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		seenBody.Store(b)
+		writeBucketInfo(w)
+	}))
+	t.Cleanup(server.Close)
+
+	c, err := client.New(server.URL, "t")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	owner := true
+	perms := openapi.ApiBucketKeyPerm{Owner: &owner}
+	if err := c.AllowBucketKey(context.Background(), "bid", "akid", perms); err != nil {
+		t.Fatalf("AllowBucketKey: %v", err)
+	}
+
+	body, _ := seenBody.Load().([]byte)
+	var got openapi.BucketKeyPermChangeRequest
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal body: %v: %s", err, body)
+	}
+	if got.BucketId != "bid" || got.AccessKeyId != "akid" {
+		t.Fatalf("body = %+v", got)
+	}
+	if got.Permissions.Owner == nil || !*got.Permissions.Owner {
+		t.Fatalf("Permissions.Owner = %+v, want &true", got.Permissions.Owner)
+	}
+}
+
+func TestAllowBucketKey_validation(t *testing.T) {
+	t.Parallel()
+
+	c, err := client.New("http://127.0.0.1:1/", "t")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := c.AllowBucketKey(context.Background(), "", "akid", openapi.ApiBucketKeyPerm{}); err == nil {
+		t.Fatal("expected error for empty bucketID")
+	}
+	if err := c.AllowBucketKey(context.Background(), "bid", "", openapi.ApiBucketKeyPerm{}); err == nil {
+		t.Fatal("expected error for empty accessKeyID")
+	}
+}
+
 func TestRemoveBucketAlias_success(t *testing.T) {
 	t.Parallel()
 

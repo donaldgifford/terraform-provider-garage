@@ -355,61 +355,69 @@ diagnostic message shape on the "non-empty without force" path.
 
 #### Tasks
 
-- [ ] Add `github.com/aws/aws-sdk-go-v2`, `aws-sdk-go-v2/config`,
+- [x] Add `github.com/aws/aws-sdk-go-v2`, `aws-sdk-go-v2/config`,
       `aws-sdk-go-v2/credentials`, `aws-sdk-go-v2/service/s3` to `go.mod`
-- [ ] Extend `provider.Schema()` and `provider.Configure()` with three
-      optional provider attributes:
-  - `s3_endpoint` (String, env fallback `GARAGE_S3_ENDPOINT`)
-  - `s3_access_key` (String, env fallback `GARAGE_S3_ACCESS_KEY`)
-  - `s3_secret_key` (String, `Sensitive = true`, env fallback
-    `GARAGE_S3_SECRET_KEY`)
-      Plumb into `providerData` alongside the admin `*client.Client` so
-      resources can access them. None are required at provider config
-      time — only at Delete time when `force_destroy = true` is invoked
-      on a non-empty bucket
-- [ ] Implement `internal/resources/bucket/s3empty.go`:
-      `emptyBucket(ctx, s3cfg, bucketName) error` using
-      `s3.ListObjectsV2Paginator` to enumerate keys + `s3.DeleteObjects`
-      to batch-delete (up to 1000 per request). Loop until paginator
-      reports no more pages. Configure the S3 client with
-      `BaseEndpoint = aws.String(s3Endpoint)`,
-      `Credentials = credentials.NewStaticCredentialsProvider(access, secret, "")`,
-      `Region = "garage"` (placeholder — Garage doesn't enforce AWS region
-      names), and S3 option `UsePathStyle = true` (Garage requires
-      path-style addressing)
-- [ ] Implement `Delete()`:
-  - Always issue `GetBucket` first to check `objects` count
+- [x] Extend `provider.Schema()` and `provider.Configure()` with three
+      optional provider attributes (`s3_endpoint`, `s3_access_key`,
+      `s3_secret_key` with the `s3_secret_key` marked sensitive) and
+      env fallbacks (`GARAGE_S3_ENDPOINT`, `GARAGE_S3_ACCESS_KEY`,
+      `GARAGE_S3_SECRET_KEY`). Introduced `client.ProviderData` to
+      bundle the admin client + S3 fields and plumb them into
+      `ResourceData` / `DataSourceData` (replaces the previous
+      `*client.Client` plumbing — clusterinfo updated in lockstep)
+- [x] Implement `internal/resources/bucket/s3empty.go` with
+      `emptyBucket(ctx, cfg, bucketName)` using
+      `s3.ListObjectsV2Paginator` + `s3.DeleteObjects` (batch up to
+      1000 per call). Configured for Garage: `Region = "garage"`,
+      `UsePathStyle = true`, `BaseEndpoint` pinned, static
+      credentials. `s3EmptyConfig.validate()` refuses up-front when
+      any of the three fields is empty
+- [x] Implement `Delete()`:
+  - Always issue `GetBucket` first; on `ErrNotFound`, return silently
+    (already deleted out-of-band)
   - If `objects == 0`: `client.DeleteBucket` directly
-  - If `objects > 0` and `force_destroy = false`: emit diagnostic
-    `"bucket 'X' is not empty (Y objects); set force_destroy = true to delete"`
-    and return without calling `DeleteBucket`
-  - If `objects > 0` and `force_destroy = true`: validate
-    `s3_endpoint` / `s3_access_key` / `s3_secret_key` are configured;
-    if any are missing, emit a diagnostic naming the missing attrs;
-    otherwise call `emptyBucket(...)` then `client.DeleteBucket`
-- [ ] Acceptance test `TestAccGarageBucket_deleteEmpty`: create empty,
-      destroy, verify gone (no S3 creds needed)
-- [ ] Acceptance test `TestAccGarageBucket_rejectNonEmptyWithoutForce`:
-      create bucket, put an object via an acctest S3 helper, attempt
-      destroy, expect failure with the documented diag
-- [ ] Acceptance test `TestAccGarageBucket_forceDestroyNonEmpty`: same
-      setup with `force_destroy = true` and S3 creds configured —
-      expect successful destroy
-- [ ] Acceptance test `TestAccGarageBucket_forceDestroyMissingS3Creds`:
-      `force_destroy = true` on a non-empty bucket with no S3 creds on
-      the provider — expect an actionable diagnostic, not a panic
-- [ ] Run all gates green
-- [ ] Commit as `feat: garage_bucket Delete + force_destroy (IMPL-0002 Phase 6)`
+  - If `objects > 0` and `force_destroy = false`: diagnostic naming
+    the bucket and the object count
+  - If `objects > 0` and `force_destroy = true`: validate S3 creds via
+    `s3EmptyConfig.validate()`; call `emptyBucket(...)` then
+    `client.DeleteBucket`. Edge case: bucket with no aliases gets a
+    dedicated diagnostic (S3 addresses by alias)
+- [x] Added `client.AllowBucketKey` admin wrapper — needed by the
+      Phase 6 tests to grant the fixture's default S3 key access on
+      Terraform-managed buckets. RFC-0001 Phase 4 (garage_bucket_key
+      resource) will consume the same wrapper as production code
+- [x] Extended `internal/acctest/fixture.go` to expose the S3 port
+      (3900/tcp) and surface `S3Endpoint`, `S3AccessKey`, `S3SecretKey`
+      on the `*Garage` value. Added `TestAccProviderConfigWithS3` for
+      provider blocks that include the S3 attrs
+- [x] Acceptance test `TestAccGarageBucket_rejectNonEmptyWithoutForce`:
+      bucket made non-empty via direct S3 PUT; `Destroy: true` step
+      with `ExpectError` matches `"is not empty"`; followup step flips
+      `force_destroy = true` so the framework's final teardown succeeds
+- [x] Acceptance test `TestAccGarageBucket_forceDestroyNonEmpty`:
+      bucket with `force_destroy = true`, two objects PUT externally,
+      framework teardown runs the force-empty path successfully
+- [x] Acceptance test `TestAccGarageBucket_forceDestroyMissingS3Creds`:
+      provider without `s3_*` attrs, `force_destroy = true` + non-empty
+      bucket; `Destroy: true` step `ExpectError` matches
+      `"force_destroy requires provider-level S3 credentials"`;
+      followup step adds the S3 attrs so teardown succeeds
+- [x] `TestAccGarageBucket_deleteEmpty` already covered by the existing
+      Phase 4 `TestAccGarageBucket_minimal` (which destroys an empty
+      bucket at the end of its TestCase) — not duplicated
+- [x] Run all gates green — all 8 bucket acceptance tests pass in ~13s
+      (parallel); lint clean
+- [x] Commit as `feat: garage_bucket Delete + force_destroy (IMPL-0002 Phase 6)`
 
 #### Success Criteria
 
-- Empty-bucket destroy succeeds without S3 creds (admin API only)
+- Empty-bucket destroy succeeds without S3 creds (admin API only) ✓
 - Non-empty bucket with `force_destroy = true` is emptied (S3 data plane)
-  and deleted (admin API) in the resource's normal Delete call
+  and deleted (admin API) in the resource's normal Delete call ✓
 - Non-empty bucket with `force_destroy = false` fails with an actionable
-  diagnostic naming the bucket and the object count
+  diagnostic naming the bucket and the object count ✓
 - Missing S3 creds when `force_destroy` triggers them produces an
-  actionable diagnostic, not a panic or generic 4xx
+  actionable diagnostic naming the missing fields ✓
 
 ---
 

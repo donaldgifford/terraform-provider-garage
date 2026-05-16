@@ -32,8 +32,11 @@ import (
 // they appear in one place — the resolution helper below and the schema
 // MarkdownDescription strings reference them.
 const (
-	envEndpoint = "GARAGE_ENDPOINT"
-	envToken    = "GARAGE_TOKEN"
+	envEndpoint    = "GARAGE_ENDPOINT"
+	envToken       = "GARAGE_TOKEN"
+	envS3Endpoint  = "GARAGE_S3_ENDPOINT"
+	envS3AccessKey = "GARAGE_S3_ACCESS_KEY"
+	envS3SecretKey = "GARAGE_S3_SECRET_KEY"
 )
 
 // Compile-time interface assertion. Phase 6+ may extend this with
@@ -50,8 +53,11 @@ type GarageProvider struct {
 // decoding. Attribute fields use the framework's nullable types so the
 // Configure path can distinguish "unset" from "empty string".
 type GarageProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"`
-	Token    types.String `tfsdk:"token"`
+	Endpoint    types.String `tfsdk:"endpoint"`
+	Token       types.String `tfsdk:"token"`
+	S3Endpoint  types.String `tfsdk:"s3_endpoint"`
+	S3AccessKey types.String `tfsdk:"s3_access_key"`
+	S3SecretKey types.String `tfsdk:"s3_secret_key"`
 }
 
 // New returns the constructor expected by providerserver.Serve. The version
@@ -93,6 +99,30 @@ func (*GarageProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				MarkdownDescription: "Garage admin bearer token. Falls back to the `" + envToken +
 					"` environment variable when unset; `" + envToken + "` is the recommended supply mechanism " +
 					"so the token does not appear in plan output or state files.",
+				Optional:  true,
+				Sensitive: true,
+			},
+			"s3_endpoint": schema.StringAttribute{
+				MarkdownDescription: "Garage S3 API endpoint (e.g. `https://s3.garage.example.com:3900`). " +
+					"Only required for resources that reach the S3 data plane (currently `garage_bucket` " +
+					"with `force_destroy = true`). Falls back to `" + envS3Endpoint + "` when unset.",
+				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^https?://`),
+						"s3_endpoint must be an http(s) URL",
+					),
+				},
+			},
+			"s3_access_key": schema.StringAttribute{
+				MarkdownDescription: "S3 access key id used by `garage_bucket`'s `force_destroy` to empty " +
+					"a bucket via the S3 data plane before deleting it. Falls back to `" + envS3AccessKey +
+					"` when unset.",
+				Optional: true,
+			},
+			"s3_secret_key": schema.StringAttribute{
+				MarkdownDescription: "Secret access key paired with `s3_access_key`. Falls back to `" +
+					envS3SecretKey + "` when unset.",
 				Optional:  true,
 				Sensitive: true,
 			},
@@ -161,8 +191,14 @@ func (*GarageProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		return
 	}
 
-	resp.DataSourceData = c
-	resp.ResourceData = c
+	data := &client.ProviderData{
+		Client:      c,
+		S3Endpoint:  resolve(cfg.S3Endpoint, envS3Endpoint),
+		S3AccessKey: resolve(cfg.S3AccessKey, envS3AccessKey),
+		S3SecretKey: resolve(cfg.S3SecretKey, envS3SecretKey),
+	}
+	resp.DataSourceData = data
+	resp.ResourceData = data
 }
 
 // Resources returns the resource constructors the provider exposes.

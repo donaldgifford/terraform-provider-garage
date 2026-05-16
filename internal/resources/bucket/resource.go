@@ -38,8 +38,15 @@ var (
 )
 
 // Resource is the framework implementation of garage_bucket.
+//
+// `client` is the admin v2 wrapper; `s3*` fields carry the optional S3
+// data-plane credentials Garage's admin DeleteBucket needs us to
+// reach around when `force_destroy = true` on a non-empty bucket.
 type Resource struct {
-	client *client.Client
+	client      *client.Client
+	s3Endpoint  string
+	s3AccessKey string
+	s3SecretKey string
 }
 
 // New is the constructor passed to provider.Resources() once Phase 4
@@ -133,25 +140,26 @@ func (*Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resou
 	}
 }
 
-// Configure asserts the provider-supplied client and stashes it on the
-// resource instance. Mirrors the clusterinfo data source's pattern —
-// the cast failure path emits an "unexpected provider data type" error
-// pointing at the provider developers, since it can only fire if the
-// provider's Configure starts handing out a different type.
+// Configure asserts the provider-supplied data bundle and stashes the
+// admin client + optional S3 credentials on the resource instance. The
+// S3 fields are only consumed by Delete's force_destroy path.
 func (r *Resource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
 
-	c, ok := req.ProviderData.(*client.Client)
+	data, ok := req.ProviderData.(*client.ProviderData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data type",
-			fmt.Sprintf("Expected *client.Client, got %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.ProviderData, got %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	r.client = c
+	r.client = data.Client
+	r.s3Endpoint = data.S3Endpoint
+	r.s3AccessKey = data.S3AccessKey
+	r.s3SecretKey = data.S3SecretKey
 }
 
 // Create implements the three-step flow from DESIGN-0002 §Create flow:
@@ -338,11 +346,19 @@ func (r *Resource) Update(ctx context.Context, req resource.UpdateRequest, resp 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
-// Delete deletes the bucket. Phase 4 ships a minimal implementation
-// that handles the empty-bucket case via the admin API only — needed
-// for the Phase 4 acceptance tests to clean up after themselves.
-// Phase 6 extends this with force_destroy + S3 data-plane emptying
-// for non-empty buckets.
+// Delete removes the bucket. Always begins with a GetBucket to check
+// the live object count — Garage's spec text refuses non-empty deletes,
+// and the resource needs to either bail with an actionable diagnostic
+// or empty the bucket first (per `force_destroy`).
+//
+// Three paths:
+//
+//   - objects == 0: admin DeleteBucket directly (no S3 needed)
+//   - objects > 0 && !force_destroy: diagnostic naming the bucket and
+//     the object count; nothing is deleted
+//   - objects > 0 && force_destroy: validate S3 creds are configured,
+//     enumerate-and-batch-delete via the S3 data plane, then admin
+//     DeleteBucket
 //
 //nolint:gocritic // DeleteRequest is the framework interface signature.
 func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -357,13 +373,63 @@ func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 		return
 	}
 
-	if err := r.client.DeleteBucket(ctx, bucketID); err != nil {
+	info, err := r.client.GetBucket(ctx, bucketID)
+	if errors.Is(err, client.ErrNotFound) {
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read bucket prior to delete", err.Error())
+		return
+	}
+
+	if info.Objects == 0 {
+		if err := r.client.DeleteBucket(ctx, bucketID); err != nil {
+			resp.Diagnostics.AddError("Failed to delete bucket", err.Error())
+		}
+		return
+	}
+
+	if !state.ForceDestroy.ValueBool() {
 		resp.Diagnostics.AddError(
-			"Failed to delete bucket",
-			err.Error()+
-				"\n\nNote: in IMPL-0002 Phase 4 this resource only handles empty-bucket "+
-				"deletion. Phase 6 adds force_destroy + S3 data-plane emptying for "+
-				"non-empty buckets.",
+			fmt.Sprintf("Bucket %q is not empty", bucketID),
+			fmt.Sprintf(
+				"Bucket has %d object(s) and force_destroy is false. "+
+					"Set force_destroy = true (and configure the provider's s3_endpoint, "+
+					"s3_access_key, s3_secret_key) to let Terraform empty the bucket via "+
+					"the S3 data plane before deleting.",
+				info.Objects,
+			),
 		)
+		return
+	}
+
+	if len(info.GlobalAliases) == 0 {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Cannot force_destroy bucket %q — no global aliases", bucketID),
+			fmt.Sprintf(
+				"Bucket has %d object(s) but no global aliases. Garage's S3 API addresses "+
+					"buckets by alias, so the bucket cannot be emptied via the S3 data "+
+					"plane without one. Restore an alias out-of-band or empty the bucket manually.",
+				info.Objects,
+			),
+		)
+		return
+	}
+
+	s3Cfg := s3EmptyConfig{
+		Endpoint:  r.s3Endpoint,
+		AccessKey: r.s3AccessKey,
+		SecretKey: r.s3SecretKey,
+	}
+	if err := emptyBucket(ctx, s3Cfg, info.GlobalAliases[0]); err != nil {
+		resp.Diagnostics.AddError(
+			fmt.Sprintf("Failed to empty bucket %q (force_destroy)", bucketID),
+			err.Error(),
+		)
+		return
+	}
+
+	if err := r.client.DeleteBucket(ctx, bucketID); err != nil {
+		resp.Diagnostics.AddError("Failed to delete bucket after force-empty", err.Error())
 	}
 }

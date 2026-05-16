@@ -7,14 +7,60 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/donaldgifford/terraform-provider-garage/internal/acctest"
 	"github.com/donaldgifford/terraform-provider-garage/internal/client"
+	"github.com/donaldgifford/terraform-provider-garage/internal/client/openapi"
 )
+
+// grantBucketAccess uses the admin API to grant the fixture's default
+// S3 access key full data-plane access on the freshly-created bucket.
+// Garage's permission model treats Owner / Read / Write as independent
+// flags — Owner grants administrative ownership but not data-plane
+// operations; Read/Write gate the actual S3 GET/PUT. We set all three
+// so the PutObject calls below succeed.
+func grantBucketAccess(t *testing.T, g *acctest.Garage, bucketID string) {
+	t.Helper()
+	c, err := client.New(g.Endpoint, g.AdminToken)
+	if err != nil {
+		t.Fatalf("client.New: %v", err)
+	}
+	yes := true
+	perms := openapi.ApiBucketKeyPerm{Owner: &yes, Read: &yes, Write: &yes}
+	if err := c.AllowBucketKey(context.Background(), bucketID, g.S3AccessKey, perms); err != nil {
+		t.Fatalf("AllowBucketKey: %v", err)
+	}
+}
+
+// putObject PUTs a small object into the named bucket alias via the
+// S3 data plane using the fixture's default credentials.
+func putObject(t *testing.T, g *acctest.Garage, bucketAlias, key, content string) {
+	t.Helper()
+	awsCfg := aws.Config{
+		Region:      "garage",
+		Credentials: credentials.NewStaticCredentialsProvider(g.S3AccessKey, g.S3SecretKey, ""),
+	}
+	cli := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(g.S3Endpoint)
+		o.UsePathStyle = true
+	})
+	if _, err := cli.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket: aws.String(bucketAlias),
+		Key:    aws.String(key),
+		Body:   strings.NewReader(content),
+	}); err != nil {
+		t.Fatalf("PutObject(%s/%s): %v", bucketAlias, key, err)
+	}
+}
 
 // TestAccGarageBucket_minimal is the smallest possible garage_bucket
 // resource — no aliases, no quotas, default force_destroy=false.
@@ -214,6 +260,181 @@ func TestAccGarageBucket_updateQuotas(t *testing.T) {
 					resource.TestCheckNoResourceAttr("garage_bucket.test", "max_size"),
 					resource.TestCheckNoResourceAttr("garage_bucket.test", "max_objects"),
 				),
+			},
+		},
+	})
+}
+
+// TestAccGarageBucket_rejectNonEmptyWithoutForce — IMPL-0002 Phase 6.
+// Verifies that Delete refuses to act on a non-empty bucket when
+// force_destroy is false, surfacing the documented diagnostic. The
+// final step flips force_destroy to true so the test framework's
+// teardown destroy succeeds (otherwise Garage's bucket would leak into
+// subsequent test runs of the same container — which doesn't apply
+// here since containers are per-test, but the pattern is correct).
+func TestAccGarageBucket_rejectNonEmptyWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	var bucketID string
+	const alias = "force-test-reject"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureBucketID(&bucketID),
+				),
+			},
+			{
+				PreConfig: func() {
+					grantBucketAccess(t, g, bucketID)
+					putObject(t, g, alias, "obj-1", "hello")
+				},
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.test", "objects", "1"),
+				),
+			},
+			{
+				Config:      acctest.TestAccProviderConfigWithS3(g),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`is not empty`),
+			},
+			{
+				// Flip force_destroy=true so the framework's final
+				// teardown destroy succeeds (otherwise the bucket would
+				// stay leaked but that doesn't matter — containers are
+				// per-test).
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
+			},
+		},
+	})
+}
+
+// TestAccGarageBucket_forceDestroyNonEmpty — IMPL-0002 Phase 6.
+// Bucket created with force_destroy=true; an object is PUT externally;
+// the test framework's teardown destroy hits the force-empty path:
+// emptyBucket via S3 → admin DeleteBucket → bucket gone.
+func TestAccGarageBucket_forceDestroyNonEmpty(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	var bucketID string
+	const alias = "force-test-empty"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureBucketID(&bucketID),
+				),
+			},
+			{
+				PreConfig: func() {
+					grantBucketAccess(t, g, bucketID)
+					putObject(t, g, alias, "obj-1", "data-1")
+					putObject(t, g, alias, "obj-2", "data-2")
+				},
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.test", "objects", "2"),
+					resource.TestCheckResourceAttr("garage_bucket.test", "force_destroy", "true"),
+				),
+			},
+		},
+	})
+}
+
+// TestAccGarageBucket_forceDestroyMissingS3Creds — IMPL-0002 Phase 6.
+// force_destroy=true on a non-empty bucket, but the provider has no
+// s3_* attributes configured. emptyBucket's validate() should refuse
+// before any S3 call, surfacing a diagnostic naming the missing
+// fields. The final step adds the S3 attrs back so the framework's
+// teardown destroy succeeds.
+func TestAccGarageBucket_forceDestroyMissingS3Creds(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	var bucketID string
+	const alias = "force-test-nocreds"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Provider WITHOUT s3_* attrs.
+				Config: acctest.TestAccProviderConfig(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					captureBucketID(&bucketID),
+				),
+			},
+			{
+				PreConfig: func() {
+					grantBucketAccess(t, g, bucketID)
+					putObject(t, g, alias, "obj-1", "hello")
+				},
+				Config: acctest.TestAccProviderConfig(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.test", "objects", "1"),
+				),
+			},
+			{
+				Config:      acctest.TestAccProviderConfig(g),
+				Destroy:     true,
+				ExpectError: regexp.MustCompile(`force_destroy requires provider-level S3 credentials`),
+			},
+			{
+				// Add s3_* attrs so the framework's final teardown destroy works.
+				Config: acctest.TestAccProviderConfigWithS3(g) + fmt.Sprintf(`
+resource "garage_bucket" "test" {
+  global_aliases = [%q]
+  force_destroy  = true
+}
+`, alias),
 			},
 		},
 	})

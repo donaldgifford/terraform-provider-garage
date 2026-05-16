@@ -265,6 +265,46 @@ func (c *Client) AddBucketAlias(ctx context.Context, bucketID, globalAlias strin
 	return statusToError(op, resp.StatusCode(), resp.Body)
 }
 
+// AllowBucketKey grants an access key permissions on a bucket. Used by
+// IMPL-0002's force_destroy acceptance tests to grant the fixture's
+// default key access to Terraform-managed buckets so the test can PUT
+// objects before exercising force_destroy. RFC-0001 Phase 4
+// (garage_bucket_key resource) consumes this wrapper as production code.
+func (c *Client) AllowBucketKey(ctx context.Context, bucketID, accessKeyID string, perms openapi.ApiBucketKeyPerm) error {
+	const op = "AllowBucketKey"
+
+	if bucketID == "" {
+		return fmt.Errorf("%s: bucketID is required", op)
+	}
+	if accessKeyID == "" {
+		return fmt.Errorf("%s: accessKeyID is required", op)
+	}
+
+	body := openapi.AllowBucketKeyJSONRequestBody{
+		AccessKeyId: accessKeyID,
+		BucketId:    bucketID,
+		Permissions: perms,
+	}
+
+	tflog.Trace(ctx, "garage admin request", map[string]any{
+		"op":       op,
+		"bucketId": bucketID,
+		"key":      accessKeyID,
+	})
+
+	resp, err := c.api.AllowBucketKeyWithResponse(ctx, body)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	tflog.Trace(ctx, "garage admin response", map[string]any{
+		"op":     op,
+		"status": resp.StatusCode(),
+	})
+
+	return statusToError(op, resp.StatusCode(), resp.Body)
+}
+
 // RemoveBucketAlias detaches a global alias from a bucket. Symmetric to
 // AddBucketAlias.
 func (c *Client) RemoveBucketAlias(ctx context.Context, bucketID, globalAlias string) error {
