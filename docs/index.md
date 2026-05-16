@@ -26,4 +26,7 @@ provider "garage" {
 ### Optional
 
 - `endpoint` (String) Garage admin API endpoint (e.g. `https://garage.example.com:3903`). Falls back to the `GARAGE_ENDPOINT` environment variable when unset.
+- `s3_access_key` (String) S3 access key id used by `garage_bucket`'s `force_destroy` to empty a bucket via the S3 data plane before deleting it. Falls back to `GARAGE_S3_ACCESS_KEY` when unset.
+- `s3_endpoint` (String) Garage S3 API endpoint (e.g. `https://s3.garage.example.com:3900`). Only required for resources that reach the S3 data plane (currently `garage_bucket` with `force_destroy = true`). Falls back to `GARAGE_S3_ENDPOINT` when unset.
+- `s3_secret_key` (String, Sensitive) Secret access key paired with `s3_access_key`. Falls back to `GARAGE_S3_SECRET_KEY` when unset.
 - `token` (String, Sensitive) Garage admin bearer token. Falls back to the `GARAGE_TOKEN` environment variable when unset; `GARAGE_TOKEN` is the recommended supply mechanism so the token does not appear in plan output or state files.

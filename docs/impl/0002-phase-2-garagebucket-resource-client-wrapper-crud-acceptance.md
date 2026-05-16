@@ -1,7 +1,7 @@
 ---
 id: IMPL-0002
 title: "Phase 2 garage_bucket resource: client wrapper, CRUD, acceptance suite"
-status: Draft
+status: Accepted
 author: Donald Gifford
 created: 2026-05-15
 ---
@@ -9,7 +9,7 @@ created: 2026-05-15
 
 # IMPL 0002: Phase 2 garage_bucket resource: client wrapper, CRUD, acceptance suite
 
-**Status:** Draft
+**Status:** Accepted
 **Author:** Donald Gifford
 **Date:** 2026-05-15
 
@@ -463,34 +463,44 @@ provider docs; CI green on the PR.
 
 #### Tasks
 
-- [ ] Write `examples/resources/garage_bucket/resource.tf` — minimal
-      example matching the `tfplugindocs` convention (single resource
-      block, no `terraform { required_providers }`, no `variable`
-      declarations, plus an `import.sh` for the import command line)
-- [ ] Run `just generate`; verify `docs/resources/bucket.md` is generated
-      and reads well
-- [ ] Spot-check generated docs for Markdown rendering issues
-- [ ] Add `TestAccGarageBucket_zeroQuotaSemantics`: `max_size = 0`,
-      verify Garage reports quota = 0 (literal zero, not "no quota")
-- [ ] Add `TestAccGarageBucket_aliasReorderNoOp`: same alias set in
-      different orders should produce no plan diff
-- [ ] Add `TestAccGarageBucket_parallelSafety`: 3 buckets in one config
-      with `count = 3`; ensure parallel-apply doesn't trip alias
-      collisions or race on shared state
-- [ ] Run `just generate` one more time; commit `docs/resources/bucket.md`
-- [ ] CI green on the PR: `lint`, `test-go`, `security`, `build`,
-      `generate`, `acceptance` (TF 1.13 + 1.14) all pass
-- [ ] Commit final docs/test additions as
+- [x] Write `examples/resources/garage_bucket/resource.tf` — minimal
+      example (single resource block, no `terraform { required_providers }`,
+      no `variable` declarations) and `examples/resources/garage_bucket/import.sh`
+      for the import command line. Both match the existing
+      `examples/data-sources/garage_cluster_info/` convention
+- [x] Run `just generate`; `docs/resources/bucket.md` rendered cleanly
+      from `examples/resources/garage_bucket/` + the schema's
+      MarkdownDescription strings; `docs/index.md` updated with the
+      new s3_* provider attributes from Phase 6
+- [x] Spot-check generated docs — schema attrs grouped under
+      Optional/Read-Only, Example Usage from `resource.tf` renders as
+      a code block, Import section pulls from `import.sh`. No Markdown
+      issues
+- [x] Add `TestAccGarageBucket_zeroQuotaSemantics` — `max_size = 0` and
+      `max_objects = 0` both round-trip as literal zeros (not cleared)
+- [x] Add `TestAccGarageBucket_aliasReorderNoOp` — same alias set in
+      reversed order produces zero plan diff (`PlanOnly: true` step
+      fails if any diff appears)
+- [x] Add `TestAccGarageBucket_parallelSafety` — `count = 3` with
+      distinct aliases; framework's default concurrent apply drives
+      all three Create lifecycles together
+- [x] Re-ran `just generate`; verified zero diff (idempotent)
+- [ ] CI green on the PR — pending push of the branch (not validated
+      locally; lint + 11 acceptance tests pass under `TF_ACC=1` on the
+      developer machine, but the CI matrix will exercise TF 1.13 + 1.14
+      and the linter on a clean container)
+- [x] Commit final docs/test additions as
       `feat: garage_bucket acceptance polish + docs (IMPL-0002 Phase 8)`
 
 #### Success Criteria
 
-- `docs/resources/bucket.md` exists and reflects the schema accurately
-- `examples/resources/garage_bucket/resource.tf` renders cleanly in docs
-- All `TestAccGarageBucket_*` tests pass; total acceptance-test wall time
-  per matrix entry under 90s (10 tests × ~10s container start)
-- CI `acceptance` job green on the PR
-- `just generate` idempotent (zero diff on re-run)
+- `docs/resources/bucket.md` exists and reflects the schema accurately ✓
+- `examples/resources/garage_bucket/resource.tf` renders cleanly in docs ✓
+- All `TestAccGarageBucket_*` tests pass; total acceptance-test wall
+  time ~13s parallel (11 tests in the bucket suite + 1 cluster_info
+  data source) — well under the 90s budget ✓
+- CI `acceptance` job green on the PR — pending push
+- `just generate` idempotent (zero diff on re-run) ✓
 
 ---
 

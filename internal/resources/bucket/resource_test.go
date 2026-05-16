@@ -440,6 +440,107 @@ resource "garage_bucket" "test" {
 	})
 }
 
+// TestAccGarageBucket_zeroQuotaSemantics — IMPL-0002 Phase 8. Asserts
+// that `max_size = 0` flows through as a literal zero (not "no
+// quota"). Already exercised as a step in TestAccGarageBucket_updateQuotas;
+// dedicated test here makes the semantic explicit in the test name for
+// future-reader clarity.
+func TestAccGarageBucket_zeroQuotaSemantics(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: acctest.TestAccProviderConfig(g) + `
+resource "garage_bucket" "test" {
+  global_aliases = ["zero-quota"]
+  max_size       = 0
+  max_objects    = 0
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.test", "max_size", "0"),
+					resource.TestCheckResourceAttr("garage_bucket.test", "max_objects", "0"),
+				),
+			},
+		},
+	})
+}
+
+// TestAccGarageBucket_aliasReorderNoOp — IMPL-0002 Phase 8. Confirms
+// the schema's Set semantics: reordering the same alias values in HCL
+// produces zero plan diff. Step 2 reuses Step 1's alias values in
+// reversed order and demands an empty plan (default ExpectNonEmptyPlan
+// is false, which fails the step on any diff).
+func TestAccGarageBucket_aliasReorderNoOp(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: acctest.TestAccProviderConfig(g) + `
+resource "garage_bucket" "test" {
+  global_aliases = ["alpha", "beta", "gamma"]
+}
+`,
+				Check: resource.TestCheckResourceAttr("garage_bucket.test", "global_aliases.#", "3"),
+			},
+			{
+				// Same elements, reversed order. Set semantics → no diff.
+				Config: acctest.TestAccProviderConfig(g) + `
+resource "garage_bucket" "test" {
+  global_aliases = ["gamma", "beta", "alpha"]
+}
+`,
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// TestAccGarageBucket_parallelSafety — IMPL-0002 Phase 8. Declares
+// three independent buckets in a single config and lets Terraform's
+// default concurrent-apply behavior drive them through Create together.
+// Failure mode would be alias collisions or shared-state races inside
+// the provider; expected behavior is three distinct buckets, each
+// with its unique alias.
+func TestAccGarageBucket_parallelSafety(t *testing.T) {
+	t.Parallel()
+
+	acctest.PreCheck(t)
+	g := acctest.Start(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: acctest.TestAccProviderConfig(g) + `
+resource "garage_bucket" "parallel" {
+  count          = 3
+  global_aliases = ["parallel-${count.index}"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("garage_bucket.parallel.0", "global_aliases.#", "1"),
+					resource.TestCheckResourceAttr("garage_bucket.parallel.1", "global_aliases.#", "1"),
+					resource.TestCheckResourceAttr("garage_bucket.parallel.2", "global_aliases.#", "1"),
+					resource.TestCheckTypeSetElemAttr("garage_bucket.parallel.0", "global_aliases.*", "parallel-0"),
+					resource.TestCheckTypeSetElemAttr("garage_bucket.parallel.1", "global_aliases.*", "parallel-1"),
+					resource.TestCheckTypeSetElemAttr("garage_bucket.parallel.2", "global_aliases.*", "parallel-2"),
+				),
+			},
+		},
+	})
+}
+
 // TestAccGarageBucket_import — IMPL-0002 Phase 7. Bare-id import
 // round-trips cleanly: ImportState passes the id through to state, the
 // subsequent Read populates everything else from Garage, and
