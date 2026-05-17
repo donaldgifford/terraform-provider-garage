@@ -32,6 +32,11 @@ const garageImage = "dxflrs/garage:v2.3.0"
 // container. Mapped to a random host port at runtime.
 const adminPort = "3903/tcp"
 
+// s3Port is the TCP port Garage's S3 API listens on. Exposed so
+// acceptance tests can exercise the S3 data plane (e.g. force_destroy
+// in IMPL-0002 Phase 6).
+const s3Port = "3900/tcp"
+
 // startupTimeout bounds how long the fixture waits for Garage's admin
 // endpoint to become responsive. Cold container starts on macOS Docker
 // Desktop are routinely 3-5s; 30s leaves headroom for slow CI runners.
@@ -66,10 +71,19 @@ api_bind_addr = "[::]:3903"
 // acceptance test. Endpoint and AdminToken are stable for the lifetime
 // of the container; cleanup is registered via t.Cleanup so callers
 // don't have to.
+//
+// S3Endpoint, S3AccessKey, S3SecretKey are the credentials and URL for
+// Garage's S3 API. Garage's `--default-bucket` startup grants the
+// default key full perms on the default bucket but NOT on
+// Terraform-managed buckets — tests that need S3 access on a managed
+// bucket must call AllowBucketKey first.
 type Garage struct {
-	container  testcontainers.Container
-	Endpoint   string
-	AdminToken string
+	container   testcontainers.Container
+	Endpoint    string
+	AdminToken  string
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
 }
 
 // Start launches a fresh Garage container, waits for the admin endpoint
@@ -93,7 +107,7 @@ func Start(t *testing.T) *Garage {
 
 	req := testcontainers.ContainerRequest{
 		Image:        garageImage,
-		ExposedPorts: []string{adminPort},
+		ExposedPorts: []string{adminPort, s3Port},
 		// The image has no ENTRYPOINT; its default Cmd is ["/garage", "server"].
 		// Replacing Cmd entirely means we have to repeat the binary path.
 		Cmd: []string{"/garage", "server", "--single-node", "--default-bucket"},
@@ -133,15 +147,22 @@ func Start(t *testing.T) *Garage {
 	if err != nil {
 		t.Fatalf("acctest: resolve host: %v", err)
 	}
-	mapped, err := container.MappedPort(ctx, adminPort)
+	adminMapped, err := container.MappedPort(ctx, adminPort)
 	if err != nil {
 		t.Fatalf("acctest: resolve mapped admin port: %v", err)
 	}
+	s3Mapped, err := container.MappedPort(ctx, s3Port)
+	if err != nil {
+		t.Fatalf("acctest: resolve mapped s3 port: %v", err)
+	}
 
 	return &Garage{
-		container:  container,
-		Endpoint:   fmt.Sprintf("http://%s:%s", host, mapped.Port()),
-		AdminToken: adminToken,
+		container:   container,
+		Endpoint:    fmt.Sprintf("http://%s:%s", host, adminMapped.Port()),
+		AdminToken:  adminToken,
+		S3Endpoint:  fmt.Sprintf("http://%s:%s", host, s3Mapped.Port()),
+		S3AccessKey: accessKey,
+		S3SecretKey: secretKey,
 	}
 }
 

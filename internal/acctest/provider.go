@@ -58,3 +58,18 @@ provider "garage" {
 }
 `, g.Endpoint, g.AdminToken)
 }
+
+// TestAccProviderConfigWithS3 is TestAccProviderConfig plus the three
+// S3 attributes needed by `force_destroy`. Used by IMPL-0002 Phase 6
+// tests that destroy non-empty buckets.
+func TestAccProviderConfigWithS3(g *Garage) string {
+	return fmt.Sprintf(`
+provider "garage" {
+  endpoint      = %q
+  token         = %q
+  s3_endpoint   = %q
+  s3_access_key = %q
+  s3_secret_key = %q
+}
+`, g.Endpoint, g.AdminToken, g.S3Endpoint, g.S3AccessKey, g.S3SecretKey)
+}

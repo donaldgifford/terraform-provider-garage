@@ -151,22 +151,22 @@ func (*Source) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datas
 	}
 }
 
-// Configure asserts the provider-supplied client and stashes it on the
-// data source instance for use by Read.
+// Configure asserts the provider-supplied data bundle and stashes the
+// admin client on the data source instance for use by Read.
 func (s *Source) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
 
-	c, ok := req.ProviderData.(*client.Client)
+	data, ok := req.ProviderData.(*client.ProviderData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected provider data type",
-			fmt.Sprintf("Expected *client.Client, got %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.ProviderData, got %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
-	s.client = c
+	s.client = data.Client
 }
 
 // Read fetches the current cluster status from Garage and writes the
