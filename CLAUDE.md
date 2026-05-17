@@ -29,6 +29,8 @@ Tool versions pinned in `mise.toml` (Go 1.26.2, golangci-lint 2.11.4, just, etc.
 
 Once provider code exists (Phase 1+), single-test run: `go test -v -run TestAccGarageBucket ./internal/provider/`. Acceptance tests skip without `TF_ACC=1`.
 
+**After changing dependencies** (adding/removing imports, version bumps), run `go mod tidy` and commit the resulting `go.mod` / `go.sum` updates as part of the same change. `go build ./...` doesn't enforce direct/indirect separation or prune transitive deps left behind when an import is removed, so omitting the tidy ships an inflated module graph (caught post-merge on Phase 2 — see commit `8b1b4c2`).
+
 ## Architecture
 
 Per RFC-0001 §Design/Architecture, the target layout is:
