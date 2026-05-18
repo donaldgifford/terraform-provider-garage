@@ -47,7 +47,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
 
       - name: Run unit tests
         run: just test-coverage
@@ -122,7 +122,7 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
 
       - name: Regenerate provider docs
         run: just generate
@@ -156,7 +156,7 @@ jobs:
           terraform_version: ${{ matrix.terraform }}
           terraform_wrapper: false
 
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
 
       # ubuntu-latest runners ship with Docker pre-installed; no setup-docker
       # action needed. testcontainers-go talks to /var/run/docker.sock.
