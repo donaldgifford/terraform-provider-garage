@@ -118,7 +118,7 @@ jobs:
           go-version-file: go.mod
 
       # tfplugindocs invokes `terraform fmt` on examples/ during generation.
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
 
@@ -151,7 +151,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ matrix.terraform }}
           terraform_wrapper: false
