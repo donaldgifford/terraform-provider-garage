@@ -9,7 +9,7 @@ created: 2026-05-17
 
 # DESIGN 0004: Phase 4 implementation: garage_bucket_key resource
 
-**Status:** Draft — **Sketch only.** Finalized alongside DESIGN-0003 / IMPL-0003.
+**Status:** Draft — shape decisions final (Open Questions resolved 2026-07-21, all → option **a**). Detailed Design / Data Model / Testing detail is completed during IMPL-0004.
 **Author:** Donald Gifford
 **Date:** 2026-05-17
 
@@ -41,12 +41,13 @@ delete translate to `AllowBucketKey` / `DenyBucketKey` admin calls.
 
 ## Status
 
-**Sketch.** This doc captures the cross-cutting constraints from
-DESIGN-0003 (`garage_key`) so reviewers can spot inconsistencies, but
-the full Detailed Design / Data Model / Testing Strategy sections are
-deferred until DESIGN-0003 is approved and IMPL-0003 starts. Filled in
-as part of finishing IMPL-0003 — see DESIGN-0003 §Migration / Rollout
-Plan.
+**Decisions final; detailed design completed during IMPL-0004.** The
+shape decisions — resource schema, synthetic id format, read path, and
+lifecycle mapping — are locked; see [Open Questions](#open-questions)
+(all resolved 2026-07-21 to option **a**). DESIGN-0003 (`garage_key`),
+whose cross-cutting constraints this doc captures, is likewise finalized.
+The full Data Model / Testing Strategy detail is filled in as part of
+IMPL-0004 — see DESIGN-0003 §Migration / Rollout Plan.
 
 ## Goals and Non-Goals
 
@@ -162,8 +163,9 @@ helper).
 attribute (DESIGN-0003 Decision 3) so the two resources don't fight over
 the same data. The edge lives here.
 
-**With `garage_bucket`:** `garage_bucket.global_aliases` is unrelated —
-that's a name-mapping; this is permissions. No overlap.
+**With the alias resources:** aliases are name-mappings managed by
+`garage_bucket_global_alias` / `garage_bucket_local_alias` (DESIGN-0005);
+this edge is permissions. No overlap.
 
 **Cascading deletes:** if the user destroys a `garage_bucket` or
 `garage_key` that has a referenced `garage_bucket_key`, Terraform's
@@ -175,6 +177,14 @@ pattern as `garage_bucket` does for the bucket itself.
 
 ## Open Questions
 
+**Resolution status (2026-07-21, final)** —
+resolved to option (a): **OQ1** implement defensively
+(`AllowBucketKey` true flags + `DenyBucketKey` false flags), **OQ2**
+`GetBucket.Keys[]` authoritative, **OQ3** slash-separated id, **OQ6**
+meaningful-subset test matrix. **OQ4** is resolved by precedent (below);
+**OQ5** is a non-blocking doc note. The live-behavior questions embedded
+in OQ1 / OQ2 are still confirmed empirically in IMPL-0004 Phase 2.
+
 To resolve as part of finishing DESIGN-0004 alongside IMPL-0003:
 
 1. **Single AllowBucketKey vs Allow+Deny pair for Create.** Garage's
@@ -185,26 +195,32 @@ To resolve as part of finishing DESIGN-0004 alongside IMPL-0003:
    land at `(false, true, true)`, or does it union with whatever's
    already set on the edge? If the latter, Create needs a `DenyBucketKey`
    follow-up to clear the false flags. Either way, capture in IMPL-0004
-   Phase 2 livecheck.
+   Phase 2 livecheck. **Resolution:** implement defensively — always
+   `AllowBucketKey` the true flags then `DenyBucketKey` the false flags —
+   so Create correctness does not depend on the union-vs-set answer; the
+   livecheck still records Garage's actual behavior.
 
 2. **`GetBucket.Keys[]` vs `GetKeyInfo.Buckets[]` as the read path.**
    Both surface the same edge from opposite sides. Verify they agree on
    non-trivial state (set perms via `GetBucket`-side, read via
    `GetKeyInfo`-side and back). If they disagree, the design needs to
-   pick one as source-of-truth and document the drift case.
+   pick one as source-of-truth and document the drift case. **Resolution:**
+   `GetBucket.Keys[]` is authoritative; the livecheck confirms parity with
+   `GetKeyInfo.Buckets[]`.
 
 3. **Synthetic id format.** `<bucket_id>/<access_key_id>` is the working
-   proposal. Verify both ids never contain `/` (Garage bucket ids are
-   64-char hex; access_key_ids are AWS-style alphanumeric — both safe).
-   If we're worried about future Garage versions changing the id
-   format, switch to a different separator or to a JSON-encoded id.
+   proposal. Bucket ids are confirmed `/`-free (64-char hex, observed
+   throughout IMPL-0002's live tests); `access_key_id`s are AWS-style
+   alphanumeric — confirm the `/`-free property for them in IMPL-0003.
+   If a future Garage version changes the id format, switch to a
+   different separator or a JSON-encoded id.
 
-4. **Drift signal on key/bucket deletion.** When the referenced bucket
-   or key is deleted out-of-band, `Read` returns `ErrNotFound`. The
-   edge should remove itself from state (standard framework pattern),
-   but verify this doesn't produce a misleading plan ("resource will be
-   destroyed" when it's already gone). Compare against how the bucket
-   resource handles this.
+4. **Drift signal on key/bucket deletion.** *Resolved by precedent —
+   follows the proven bucket pattern.* IMPL-0002 established
+   `Read`→`ErrNotFound`→`RemoveResource` (and a silent no-op delete when
+   the resource is already gone) for `garage_bucket`, producing a clean
+   plan. The edge reuses the same pattern; no separate live probe is
+   needed beyond a confirmatory acceptance step.
 
 5. **Permission downgrade race.** If user A updates the edge to
    `(read=true, write=false)` while user B is hitting the bucket as

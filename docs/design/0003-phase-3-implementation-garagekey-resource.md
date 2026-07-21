@@ -429,16 +429,17 @@ following the IMPL-0002 Phase 2 pattern):
   id.** Expected: HTTP 400; capture the exact message for the resource's
   diag. If Garage instead overwrites silently, that's a significant API
   surprise that changes our model.
-- **Verification C — `CreateKey` 5xx replay.** If POST CreateKey returns
-  5xx after Garage has internally committed the key, a retry would
-  produce a second key with the same name (no uniqueness constraint).
-  Expected: probably we can't distinguish this case from a true 5xx; the
-  retry policy should treat CreateKey as **non-idempotent** and not
-  retry, matching how the bucket wrapper treats CreateBucket. Verify and
-  document.
-- **Verification D — `DeleteKey` HTTP method.** Likely POST per the
-  IMPL-0002 Phase 1 finding that `DeleteBucket` is RPC-style POST. The
-  client wrapper must use whatever method the spec actually emits.
+- **Verification C — `CreateKey` 5xx replay.** *Policy resolved by
+  precedent (IMPL-0002).* The retry transport only retries GET/HEAD, so
+  `CreateKey` (POST) is never retried at the wrapper layer — the same
+  mechanism that makes `CreateBucket` non-idempotent. No policy choice
+  remains regardless of the live result; the only open item is to
+  *document* the observed 5xx body for the diagnostic. Downgraded from a
+  blocking verification to a documentation note.
+- **Verification D — `DeleteKey` HTTP method.** *Resolved.* The generated
+  client emits `POST` (`NewDeleteKeyRequest` → `http.MethodPost`),
+  matching the `DeleteBucket` RPC-style precedent. No live probe needed —
+  the method is fixed by the spec.
 
 ### Client wrapper extensions
 
@@ -562,7 +563,7 @@ Helpers in `model.go`:
 |-------------|-----------------------------------------------------------------|-------------------------------------|
 | Unit        | Wrapper methods: happy paths, error mapping, retry policy       | `internal/client/client_test.go`    |
 | Unit        | Schema validation, cross-attribute validators, ValidateConfig   | `internal/resources/key/*_test.go`  |
-| Live probe  | The four verifications above                                    | `internal/client/livecheck_test.go` |
+| Live probe  | The remaining live verifications (A, B; C documented, D resolved) | `internal/client/livecheck_test.go` |
 | Acceptance  | Garage mode: create / read / update / delete                    | `internal/resources/key/resource_test.go` |
 | Acceptance  | External mode: create / rotate / delete (with `ephemeral random_password`) | same                     |
 | Acceptance  | Mode change: garage → external triggers replace                 | same                                |
@@ -589,7 +590,8 @@ Net-new resource; no migration. Rollout sequence:
 2. Author IMPL-0003 with the phase breakdown — likely mirrors IMPL-0002's
    8-phase shape:
    - Phase 1: client wrapper extensions (5 methods) + unit tests
-   - Phase 2: livecheck probes to resolve Verifications A–D
+   - Phase 2: livecheck probes to resolve Verifications A/B (C is a
+     documentation note; D already resolved — `DeleteKey` is POST)
    - Phase 3: resource package scaffold (Metadata, Schema, Configure)
    - Phase 4: Create + Read for `secret_source = "garage"` (the simpler
      mode) + initial acceptance tests
@@ -670,9 +672,11 @@ acceptance tests).
 
 ## Open Questions
 
-Four in-implementation verifications (see [Error handling and
-idempotency](#error-handling-and-idempotency)) need live confirmation in
-IMPL-0003 Phase 2 before the resource lifecycle can be finalized:
+Two in-implementation verifications (see [Error handling and
+idempotency](#error-handling-and-idempotency)) still need live
+confirmation in IMPL-0003 Phase 2 before the resource lifecycle can be
+finalized. Two others originally listed here are now resolved from
+completed IMPL-0002 work and the generated client:
 
 - 🔜 **Verification A** — `ImportKey` idempotency on identical (id,
   secret). Determines whether the external-mode rollback path can retry
@@ -680,11 +684,12 @@ IMPL-0003 Phase 2 before the resource lifecycle can be finalized:
 - 🔜 **Verification B** — `ImportKey` with a different secret for an
   existing id. Determines the error shape we surface to users and
   whether `ErrAliasConflict`-style sentinel is warranted.
-- 🔜 **Verification C** — `CreateKey` 5xx replay. Confirms our planned
-  "treat CreateKey as non-idempotent" policy is correct.
-- 🔜 **Verification D** — `DeleteKey` HTTP method (likely POST per the
-  DeleteBucket precedent). Trivial to confirm but blocks wrapper
-  signing.
+- ✅ **Verification C** *(resolved by precedent)* — `CreateKey` is
+  non-idempotent because the retry transport only retries GET/HEAD (same
+  as `CreateBucket`, IMPL-0002). No wrapper-layer policy choice remains;
+  only the observed 5xx body needs documenting.
+- ✅ **Verification D** *(resolved)* — `DeleteKey` is `POST`, confirmed
+  from the generated client (`NewDeleteKeyRequest` → `http.MethodPost`).
 
 ## References
 
@@ -700,7 +705,7 @@ IMPL-0003 Phase 2 before the resource lifecycle can be finalized:
 - [DESIGN-0004 (sketch): Phase 4 garage_bucket_key resource](0004-phase-4-implementation-garagebucketkey-resource.md)
   — the permission-edge resource that references `garage_key.id`
 - [DESIGN-0005 (sketch): Phase 5 garage_bucket_alias resource](0005-phase-5-implementation-garagebucketalias-resource.md)
-  — the alias-edge resource (local aliases reference `garage_key.id`)
+  — the standalone alias resources; `garage_bucket_local_alias` references `garage_key.access_key_id`
 - [ADR-0002: Use terraform-plugin-framework over SDKv2](../adr/0002-use-terraform-plugin-framework-over-sdkv2.md)
   — WriteOnly + Computed + Sensitive support, ValidateConfig API
 - [Terraform Plugin Framework: Write-only Arguments](https://developer.hashicorp.com/terraform/plugin/framework/resources/write-only-arguments)
