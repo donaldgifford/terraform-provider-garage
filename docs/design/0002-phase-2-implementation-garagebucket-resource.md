@@ -64,6 +64,11 @@ land here — they ship in Phases 3-5 of RFC-0001.
   Optional in the HCL surface
 - Inline `global_aliases` set on the bucket resource (no separate alias
   resource yet)
+  > **Superseded (2026-07-21):** the inline `global_aliases` attribute is
+  > removed in Phase 5 in favor of standalone `garage_bucket_global_alias`
+  > / `garage_bucket_local_alias` resources — see
+  > [DESIGN-0005](0005-phase-5-implementation-garagebucketalias-resource.md)
+  > and [ADR-0008](../adr/0008-remove-inline-globalaliases-in-favor-of-standalone-alias.md).
 - Quotas via `UpdateBucket` with explicit nullable semantics (config-set `null`
   → "remove the quota", not "leave unchanged")
 - `force_destroy` attribute to opt into deleting buckets that still contain

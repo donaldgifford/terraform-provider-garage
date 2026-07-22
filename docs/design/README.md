@@ -34,4 +34,7 @@ docz create design "Your Design Title"
 |----|-------|--------|------|--------|------|
 | DESIGN-0001 | Phase 1 implementation: provider scaffold and OpenAPI client | Draft | 2026-05-11 | Donald Gifford | [0001-phase-1-implementation-provider-scaffold-and-openapi-client.md](0001-phase-1-implementation-provider-scaffold-and-openapi-client.md) |
 | DESIGN-0002 | Phase 2 implementation: garage_bucket resource | Draft | 2026-05-15 | Donald Gifford | [0002-phase-2-implementation-garagebucket-resource.md](0002-phase-2-implementation-garagebucket-resource.md) |
+| DESIGN-0003 | Phase 3 implementation: garage_key resource | Draft | 2026-05-17 | Donald Gifford | [0003-phase-3-implementation-garagekey-resource.md](0003-phase-3-implementation-garagekey-resource.md) |
+| DESIGN-0004 | Phase 4 implementation: garage_bucket_key resource | Draft | 2026-05-17 | Donald Gifford | [0004-phase-4-implementation-garagebucketkey-resource.md](0004-phase-4-implementation-garagebucketkey-resource.md) |
+| DESIGN-0005 | Phase 5 implementation: garage_bucket_alias resource | Draft | 2026-05-17 | Donald Gifford | [0005-phase-5-implementation-garagebucketalias-resource.md](0005-phase-5-implementation-garagebucketalias-resource.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -36,4 +36,5 @@ docz create adr "Your ADR Title"
 | ADR-0003 | OpenAPI-generated client via oapi-codegen | Accepted | 2026-05-15 | Donald Gifford | [0003-openapi-generated-client-via-oapi-codegen.md](0003-openapi-generated-client-via-oapi-codegen.md) |
 | ADR-0005 | testcontainers-go for acceptance tests | Accepted | 2026-05-15 | Donald Gifford | [0005-testcontainers-go-for-acceptance-tests.md](0005-testcontainers-go-for-acceptance-tests.md) |
 | ADR-0007 | Provider license: MPL-2.0 over Apache-2.0 | Accepted | 2026-05-15 | Donald Gifford | [0007-provider-license-mpl-20-over-apache-20.md](0007-provider-license-mpl-20-over-apache-20.md) |
+| ADR-0008 | Remove inline global_aliases in favor of standalone alias resources | Accepted | 2026-07-21 | Donald Gifford | [0008-remove-inline-globalaliases-in-favor-of-standalone-alias.md](0008-remove-inline-globalaliases-in-favor-of-standalone-alias.md) |
 <!-- END DOCZ AUTO-GENERATED -->
