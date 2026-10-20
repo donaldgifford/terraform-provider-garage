@@ -19,7 +19,7 @@ git-cliff = "latest"
 actionlint = "latest"
 
 # tools
-yq = "4.48.1"
+yq = "4.54.1"
 jq = "latest"
 "github:donaldgifford/docz" = "latest"
 
