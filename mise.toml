@@ -11,7 +11,7 @@ golines = "latest"
 just = "latest"
 
 # Formatters and linters
-markdownlint-cli2 = "0.18.1"
+markdownlint-cli2 = "0.24.0"
 yamlfmt = "0.20.0"
 yamllint = "1.37.1"
 prettier = "3.7.4"
